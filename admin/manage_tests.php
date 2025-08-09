@@ -300,13 +300,15 @@ function populateWizardForms() {
     const assembledList = document.getElementById('sortable-list');
     assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
 
-    // --- PERBAIKAN LOGIKA CHECKBOX ---
-    // Ubah semua ID kelas dari database menjadi string agar cocok dengan nilai checkbox.
     const assignedClassIdsAsString = wizardData.assigned_classes.map(String);
-    document.querySelectorAll('#classList input.class-checkbox').forEach(cb => {
-        // Cek apakah nilai checkbox (string) ada di dalam array ID kelas (yang sudah diubah jadi string).
+    const allClassCheckboxes = document.querySelectorAll('#classList input.class-checkbox');
+
+    allClassCheckboxes.forEach(cb => {
         cb.checked = assignedClassIdsAsString.includes(cb.value);
     });
+
+    // Sinkronkan status checkbox "Tugaskan ke SEMUA KELAS"
+    updateAssignAllCheckboxState();
 }
 
 function navigateWizard(direction, toStep = null) {
@@ -526,6 +528,30 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', function()
                 fetchTests(testsCurrentPage);
             });
     }
+});
+
+// --- PERBAIKAN: LOGIKA CHECKBOX "SEMUA KELAS" ---
+const assignToAllCheckbox = document.getElementById('assignToAll');
+const classCheckboxes = document.querySelectorAll('.class-checkbox');
+
+// Fungsi untuk menyinkronkan status checkbox "SEMUA KELAS"
+function updateAssignAllCheckboxState() {
+    const allChecked = Array.from(classCheckboxes).every(c => c.checked);
+    assignToAllCheckbox.checked = allChecked && classCheckboxes.length > 0;
+}
+
+// Event listener untuk checkbox "SEMUA KELAS"
+assignToAllCheckbox.addEventListener('change', function() {
+    classCheckboxes.forEach(cb => {
+        cb.checked = this.checked;
+    });
+});
+
+// Event listener untuk setiap checkbox kelas individu
+classCheckboxes.forEach(cb => {
+    cb.addEventListener('change', function() {
+        updateAssignAllCheckboxState();
+    });
 });
 
 document.getElementById('searchInput').addEventListener('keyup', () => fetchTests(1));
