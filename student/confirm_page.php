@@ -1,11 +1,7 @@
 <?php
-// Menetapkan judul halaman
 $page_title = 'Konfirmasi Ujian';
-
-// Memasukkan header
 require_once 'header.php';
 
-// 1. Validasi ID Ujian dari URL
 if (!isset($_GET['test_id']) || !is_numeric($_GET['test_id'])) {
     header("Location: index.php");
     exit;
@@ -13,51 +9,31 @@ if (!isset($_GET['test_id']) || !is_numeric($_GET['test_id'])) {
 $test_id = $_GET['test_id'];
 $student_id = $_SESSION['user_id'];
 
-// 2. Proses form jika tombol "Mulai Ujian" diklik
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // Cek lagi apakah siswa sudah pernah memulai ujian ini
-    $check_sql = "SELECT id FROM test_results WHERE student_id = ? AND test_id = ?";
-    $check_stmt = $conn->prepare($check_sql);
-    $check_stmt->bind_param("ii", $student_id, $test_id);
-    $check_stmt->execute();
-    $check_result = $check_stmt->get_result();
+    // PERBAIKAN DI SINI:
+    // Logika untuk menghapus hasil lama (DELETE FROM test_results) telah dihapus.
+    // Sekarang, sistem akan selalu membuat catatan baru untuk setiap pengerjaan.
 
-    if ($check_result->num_rows == 0) {
-        // Jika belum ada, buat record baru di test_results
-        $start_time = date('Y-m-d H:i:s');
-        $insert_sql = "INSERT INTO test_results (student_id, test_id, start_time, status) VALUES (?, ?, ?, 'in_progress')";
-        $insert_stmt = $conn->prepare($insert_sql);
-        $insert_stmt->bind_param("iis", $student_id, $test_id, $start_time);
-        $insert_stmt->execute();
-    }
+    // Buat record baru di test_results untuk sesi pengerjaan yang baru
+    $start_time = date('Y-m-d H:i:s');
+    $insert_sql = "INSERT INTO test_results (student_id, test_id, start_time, status) VALUES (?, ?, ?, 'in_progress')";
+    $insert_stmt = $conn->prepare($insert_sql);
+    $insert_stmt->bind_param("iis", $student_id, $test_id, $start_time);
+    $insert_stmt->execute();
     
-    // Redirect ke halaman pengerjaan ujian
     header("Location: test_page.php?test_id=" . $test_id);
     exit;
 }
 
-// 3. Ambil detail ujian, jumlah soal, dan total poin untuk ditampilkan
-$sql = "SELECT 
-            t.title, 
-            t.description, 
-            t.duration, 
-            COUNT(tq.id) as total_questions,
-            COALESCE(SUM(tq.points), 0) as total_points
-        FROM tests t
-        LEFT JOIN test_questions tq ON t.id = tq.test_id
-        WHERE t.id = ?
-        GROUP BY t.id";
-
+// Ambil detail ujian
+$sql = "SELECT t.title, t.description, t.duration, COUNT(tq.id) as total_questions, COALESCE(SUM(tq.points), 0) as total_points
+        FROM tests t LEFT JOIN test_questions tq ON t.id = tq.test_id
+        WHERE t.id = ? GROUP BY t.id";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $test_id);
 $stmt->execute();
 $result = $stmt->get_result();
-
-if ($result->num_rows == 0) {
-    // Jika ujian tidak ditemukan
-    header("Location: index.php");
-    exit;
-}
+if ($result->num_rows == 0) { header("Location: index.php"); exit; }
 $test = $result->fetch_assoc();
 ?>
 
@@ -100,14 +76,13 @@ $test = $result->fetch_assoc();
             <li>Waktu akan mulai berjalan setelah Anda menekan tombol "Mulai Ujian Sekarang".</li>
             <li>Pastikan koneksi internet Anda stabil selama pengerjaan.</li>
             <li>Jangan menutup browser atau me-refresh halaman selama ujian berlangsung.</li>
-            <li>Kerjakan dengan jujur dan teliti.</li>
         </ul>
     </div>
 
     <div class="mt-8">
         <form action="confirm_page.php?test_id=<?php echo $test_id; ?>" method="post">
             <button type="submit"
-                class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg transition-all transform hover:scale-105">
+                class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg">
                 Mulai Ujian Sekarang
             </button>
         </form>
@@ -115,6 +90,5 @@ $test = $result->fetch_assoc();
 </div>
 
 <?php
-// Memasukkan footer
 require_once 'footer.php';
 ?>

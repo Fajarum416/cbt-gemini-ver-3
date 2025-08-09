@@ -1,35 +1,46 @@
 <?php
+// Set timezone
+date_default_timezone_set('Asia/Jakarta');
 // --- BAGIAN INI HANYA UNTUK AJAX REQUEST ---
 if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
     require_once '../includes/config.php';
     header('Content-Type: application/json');
 
-    // Ambil daftar ujian (untuk filter & paginasi)
     if (isset($_GET['fetch_list'])) {
         $limit = 10;
         $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
         $offset = ($page - 1) * $limit;
         $category = $_GET['category'] ?? '';
         $search = $_GET['search'] ?? '';
-        
+
         $params = [];
         $types = '';
-        $sql = "SELECT SQL_CALC_FOUND_ROWS t.id, t.title, t.description, t.category, t.duration, COALESCE(SUM(tq.points), 0) AS calculated_total_points
+        $sql = "SELECT SQL_CALC_FOUND_ROWS t.id, t.title, t.category, COALESCE(SUM(tq.points), 0) AS calculated_total_points
                 FROM tests t LEFT JOIN test_questions tq ON t.id = tq.test_id WHERE 1=1";
 
-        if (!empty($category)) { $sql .= " AND t.category = ?"; $types .= 's'; $params[] = $category; }
-        if (!empty($search)) { $sql .= " AND t.title LIKE ?"; $types .= 's'; $params[] = '%' . $search . '%'; }
-        
+        if (!empty($category)) {
+            $sql .= " AND t.category = ?";
+            $types .= 's';
+            $params[] = $category;
+        }
+        if (!empty($search)) {
+            $sql .= " AND t.title LIKE ?";
+            $types .= 's';
+            $params[] = '%' . $search . '%';
+        }
+
         $sql .= " GROUP BY t.id ORDER BY t.created_at DESC LIMIT ? OFFSET ?";
         $types .= 'ii';
         $params[] = $limit;
         $params[] = $offset;
 
         $stmt = $conn->prepare($sql);
-        if (!empty($types)) { $stmt->bind_param($types, ...$params); }
+        if (!empty($types)) {
+            $stmt->bind_param($types, ...$params);
+        }
         $stmt->execute();
         $tests = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        
+
         $total_records = $conn->query("SELECT FOUND_ROWS()")->fetch_row()[0];
         $total_pages = ceil($total_records / $limit);
 
@@ -37,38 +48,11 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
         exit;
     }
 
-    // Proses Aksi (Tambah, Edit, Hapus)
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        
-        if ($action == 'delete_test') {
-            $stmt = $conn->prepare("DELETE FROM tests WHERE id = ?");
-            $stmt->bind_param("i", $_POST['test_id']);
-            if ($stmt->execute()) echo json_encode(['status' => 'success']); else echo json_encode(['status' => 'error']);
-            exit;
-        }
-
-        $title = trim($_POST['title']);
-        $description = trim($_POST['description']);
-        $category = trim($_POST['category']);
-        $duration = trim($_POST['duration']);
-
-        if (empty($title) || empty($category) || !is_numeric($duration)) {
-            echo json_encode(['status' => 'error', 'message' => 'Input tidak valid.']);
-            exit;
-        }
-
-        if ($action == 'add_test') {
-            $sql = "INSERT INTO tests (title, description, category, duration) VALUES (?, ?, ?, ?)";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("sssi", $title, $description, $category, $duration);
-        } elseif ($action == 'edit_test') {
-            $sql = "UPDATE tests SET title = ?, description = ?, category = ?, duration = ? WHERE id = ?";
-            $stmt = $conn->prepare($sql);
-            $stmt->bind_param("sssii", $title, $description, $category, $duration, $_POST['test_id']);
-        }
-        
-        if (isset($stmt) && $stmt->execute()) echo json_encode(['status' => 'success']); else echo json_encode(['status' => 'error']);
+    if (isset($_POST['action']) && $_POST['action'] == 'delete_test') {
+        $stmt = $conn->prepare("DELETE FROM tests WHERE id = ?");
+        $stmt->bind_param("i", $_POST['test_id']);
+        if ($stmt->execute()) echo json_encode(['status' => 'success']);
+        else echo json_encode(['status' => 'error']);
         exit;
     }
 }
@@ -77,7 +61,12 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
 $page_title = 'Manajemen Ujian';
 require_once 'header.php';
 $categories = $conn->query("SELECT DISTINCT category FROM tests ORDER BY category ASC")->fetch_all(MYSQLI_ASSOC);
+$question_categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY category ASC")->fetch_all(MYSQLI_ASSOC);
+$classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name ASC")->fetch_all(MYSQLI_ASSOC);
 ?>
+<!-- CDN untuk Flatpickr (Date Range Picker) -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <!-- Filter, Pencarian, dan Tombol Tambah -->
 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -91,9 +80,9 @@ $categories = $conn->query("SELECT DISTINCT category FROM tests ORDER BY categor
                 <?php echo htmlspecialchars($cat['category']); ?></option>
             <?php endforeach; ?>
         </select>
-        <button onclick="openModal('add')"
+        <button onclick="openWizard('add')"
             class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">
-            <i class="fas fa-plus mr-2"></i>Tambah Ujian
+            <i class="fas fa-plus mr-2"></i>Buat Ujian Baru
         </button>
     </div>
 </div>
@@ -104,43 +93,96 @@ $categories = $conn->query("SELECT DISTINCT category FROM tests ORDER BY categor
     <div id="pagination-controls" class="p-4 flex justify-center items-center"></div>
 </div>
 
-<!-- Modal Tambah/Edit -->
-<div id="testModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-    <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg">
-        <h2 id="modalTitle" class="text-2xl font-bold mb-6"></h2>
-        <form id="testForm">
-            <input type="hidden" name="action" id="formAction">
-            <input type="hidden" name="test_id" id="testId">
-            <div class="mb-4">
-                <label for="title" class="block font-semibold">Judul Ujian</label>
-                <input type="text" id="title" name="title" class="w-full mt-1 px-4 py-2 border rounded-lg" required>
+<!-- Modal Wizard -->
+<div id="wizardModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+        <h2 id="wizardTitle" class="text-2xl font-bold p-6 border-b"></h2>
+
+        <!-- Step 1: Detail Ujian -->
+        <div id="step1" class="p-6 overflow-y-auto">
+            <input type="hidden" id="testId">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><label class="block font-semibold">Judul Ujian</label><input type="text" id="title"
+                        class="w-full mt-1 p-2 border rounded"></div>
+                <div><label class="block font-semibold">Kategori Ujian</label><input type="text" id="category"
+                        class="w-full mt-1 p-2 border rounded"></div>
+                <div class="md:col-span-2"><label class="block font-semibold">Deskripsi</label><textarea
+                        id="description" rows="2" class="w-full mt-1 p-2 border rounded"></textarea></div>
+                <div><label class="block font-semibold">Durasi (Menit)</label><input type="number" id="duration"
+                        class="w-full mt-1 p-2 border rounded"></div>
+                <div><label class="block font-semibold">Jangka Waktu Ujian</label><input type="text"
+                        id="availability_range" class="w-full mt-1 p-2 border rounded"
+                        placeholder="Pilih rentang tanggal dan waktu"></div>
+                <div class="md:col-span-2">
+                    <label for="retake_mode" class="block font-semibold">Mode Pengerjaan Ulang</label>
+                    <select id="retake_mode" class="w-full mt-1 p-2 border rounded">
+                        <option value="0">Hanya Sekali Pengerjaan (Formal)</option>
+                        <option value="1">Ulang dengan Persetujuan Admin (Remedial)</option>
+                        <option value="2">Boleh Diulang Berkali-kali (Latihan)</option>
+                    </select>
+                </div>
             </div>
-            <div class="mb-4">
-                <label for="category" class="block font-semibold">Kategori Ujian</label>
-                <input type="text" id="category" name="category" class="w-full mt-1 px-4 py-2 border rounded-lg"
-                    required>
+        </div>
+
+        <!-- Step 2: Rakit Ujian -->
+        <div id="step2" class="p-6 flex-grow overflow-y-auto hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-gray-50 p-4 rounded-lg flex flex-col">
+                <h3 class="text-lg font-semibold mb-2">Soal dalam Ujian</h3>
+                <div class="flex justify-between items-center mb-2"><label class="font-semibold text-sm">Batas Lulus
+                        (KKM)</label><input type="number" id="passing_grade" class="w-24 p-1 border rounded text-center"
+                        value="70.00"></div>
+                <div id="sortable-list" class="space-y-2 flex-grow overflow-y-auto border p-2 rounded"></div><button
+                    onclick="removeSelectedQuestions()"
+                    class="mt-2 bg-red-500 text-white text-sm py-1 px-2 rounded">Hapus Terpilih</button>
             </div>
-            <div class="mb-4">
-                <label for="description" class="block font-semibold">Deskripsi</label>
-                <textarea id="description" name="description" rows="3"
-                    class="w-full mt-1 px-4 py-2 border rounded-lg"></textarea>
+            <div class="bg-gray-50 p-4 rounded-lg flex flex-col">
+                <h3 class="text-lg font-semibold mb-2">Bank Soal</h3>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" id="bankSearch" placeholder="Cari soal..." class="w-full p-2 border rounded">
+                    <select id="bankCategoryFilter" class="w-full p-2 border rounded">
+                        <option value="">Semua Kategori Soal</option>
+                        <?php foreach ($question_categories as $cat): ?>
+                        <option value="<?php echo htmlspecialchars($cat['category']); ?>">
+                            <?php echo htmlspecialchars($cat['category']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div id="bank-questions-list" class="space-y-2 flex-grow overflow-y-auto border p-2 rounded"></div>
+                <div id="bank-pagination" class="mt-2 text-center"></div>
+                <button onclick="addSelectedQuestions()" class="mt-2 bg-blue-500 text-white py-1 px-2 rounded">Tambahkan
+                    Terpilih</button>
             </div>
-            <div class="mb-6">
-                <label for="duration" class="block font-semibold">Durasi (Menit)</label>
-                <input type="number" id="duration" name="duration" class="w-full mt-1 px-4 py-2 border rounded-lg"
-                    required>
+        </div>
+
+        <!-- Step 3: Tugaskan Kelas -->
+        <div id="step3" class="p-6 overflow-y-auto hidden">
+            <h3 class="text-lg font-semibold mb-4">Tugaskan Ujian ke Kelas</h3>
+            <div id="classList" class="space-y-2"><label
+                    class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer"><input type="checkbox"
+                        id="assignToAll" class="h-4 w-4 rounded"><span class="ml-3 font-bold">Tugaskan ke SEMUA
+                        KELAS</span></label>
+                <hr class="my-2"><?php foreach ($classes as $class): ?><label
+                    class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer"><input type="checkbox"
+                        name="class_ids[]" value="<?php echo $class['id']; ?>"
+                        class="h-4 w-4 rounded class-checkbox"><span
+                        class="ml-3"><?php echo htmlspecialchars($class['class_name']); ?></span></label><?php endforeach; ?>
             </div>
-            <div class="flex justify-end gap-4">
-                <button type="button" onclick="closeModal()"
-                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Batal</button>
-                <button type="submit"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Simpan</button>
-            </div>
-        </form>
+        </div>
+
+        <!-- Footer Modal -->
+        <div class="flex justify-between p-6 border-t bg-gray-50"><button onclick="closeWizard()"
+                class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Batal</button>
+            <div><button id="backBtn" onclick="navigateWizard(-1)"
+                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded hidden">Kembali</button><button
+                    id="nextBtn" onclick="navigateWizard(1)"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Lanjut</button><button
+                    id="saveBtn" onclick="saveWizard()"
+                    class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded hidden">Simpan
+                    Ujian</button></div>
+        </div>
     </div>
 </div>
 
-<!-- Modal Konfirmasi Hapus -->
 <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
     <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
         <i class="fas fa-exclamation-triangle text-5xl text-red-500 mb-4"></i>
@@ -155,14 +197,259 @@ $categories = $conn->query("SELECT DISTINCT category FROM tests ORDER BY categor
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
-let currentPage = 1;
-const modal = document.getElementById('testModal');
-const deleteModal = document.getElementById('deleteModal');
-let testIdToDelete = null;
+let currentStep = 1;
+let wizardData = {
+    details: {},
+    questions: [],
+    assigned_classes: []
+};
+let sortableAssembled;
+let flatpickrInstance;
+
+function openWizard(mode, id = 0) {
+    currentStep = 1;
+    wizardData = {
+        details: {
+            test_id: id
+        },
+        questions: [],
+        assigned_classes: []
+    };
+    document.getElementById('wizardModal').classList.remove('hidden');
+    document.getElementById('testId').value = id;
+
+    if (flatpickrInstance) {
+        flatpickrInstance.destroy();
+    }
+
+    if (mode === 'add') {
+        document.getElementById('wizardTitle').textContent = 'Buat Ujian Baru - Langkah 1: Detail Ujian';
+        resetWizardForms();
+
+        const now = new Date();
+        const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+        flatpickrInstance = flatpickr("#availability_range", {
+            mode: "range",
+            enableTime: true,
+            dateFormat: "Y-m-d H:i",
+            time_24hr: true,
+            defaultDate: [now, oneWeekLater]
+        });
+
+        navigateWizard(0, 1);
+    } else if (mode === 'edit') {
+        document.getElementById('wizardTitle').textContent = 'Edit Ujian - Langkah 1: Detail Ujian';
+        fetch(`get_full_test_data.php?test_id=${id}`)
+            .then(res => res.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    wizardData = result.data;
+                    wizardData.details.test_id = id;
+                    populateWizardForms();
+                    navigateWizard(0, 1);
+                } else {
+                    alert('Gagal memuat data ujian: ' + result.message);
+                    closeWizard();
+                }
+            });
+    }
+}
+
+function resetWizardForms() {
+    document.getElementById('title').value = '';
+    document.getElementById('category').value = '';
+    document.getElementById('description').value = '';
+    document.getElementById('duration').value = '';
+    document.getElementById('availability_range').value = '';
+    document.getElementById('passing_grade').value = '70.00';
+    document.getElementById('retake_mode').value = '0';
+    document.getElementById('sortable-list').innerHTML = '';
+    document.querySelectorAll('#classList input[type="checkbox"]').forEach(cb => cb.checked = false);
+}
+
+function populateWizardForms() {
+    const details = wizardData.details;
+    document.getElementById('title').value = details.title || '';
+    document.getElementById('category').value = details.category || '';
+    document.getElementById('description').value = details.description || '';
+    document.getElementById('duration').value = details.duration || '';
+
+    if (flatpickrInstance) {
+        flatpickrInstance.destroy();
+    }
+
+    const dateConfig = {
+        mode: "range",
+        enableTime: true,
+        dateFormat: "Y-m-d H:i",
+        time_24hr: true
+    };
+
+    if (details.availability_start && details.availability_end) {
+        dateConfig.defaultDate = [details.availability_start, details.availability_end];
+    }
+
+    flatpickrInstance = flatpickr("#availability_range", dateConfig);
+
+    document.getElementById('passing_grade').value = details.passing_grade || '70.00';
+    document.getElementById('retake_mode').value = details.retake_mode || '0';
+
+    const assembledList = document.getElementById('sortable-list');
+    assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
+
+    document.querySelectorAll('#classList input.class-checkbox').forEach(cb => {
+        cb.checked = wizardData.assigned_classes.includes(String(cb.value));
+    });
+}
+
+function navigateWizard(direction, toStep = null) {
+    if (toStep) {
+        currentStep = toStep;
+    } else {
+        currentStep += direction;
+    }
+
+    const steps = [document.getElementById('step1'), document.getElementById('step2'), document.getElementById(
+    'step3')];
+    steps.forEach((step, index) => step.classList.toggle('hidden', index + 1 !== currentStep));
+
+    document.getElementById('backBtn').classList.toggle('hidden', currentStep === 1);
+    document.getElementById('nextBtn').classList.toggle('hidden', currentStep === 3);
+    document.getElementById('saveBtn').classList.toggle('hidden', currentStep !== 3);
+
+    document.getElementById('wizardTitle').textContent =
+        `Langkah ${currentStep}: ${['Detail Ujian', 'Rakit Soal', 'Tugaskan Kelas'][currentStep-1]}`;
+
+    if (currentStep === 2) setupStep2();
+}
+
+function setupStep2() {
+    const assembledList = document.getElementById('sortable-list');
+    sortableAssembled = new Sortable(assembledList, {
+        animation: 150
+    });
+    document.getElementById('bankSearch').addEventListener('keyup', () => fetchBankQuestions(1));
+    document.getElementById('bankCategoryFilter').addEventListener('change', () => fetchBankQuestions(1));
+    fetchBankQuestions();
+}
+
+function fetchBankQuestions(page = 1) {
+    const bankList = document.getElementById('bank-questions-list');
+    const search = document.getElementById('bankSearch').value;
+    const category = document.getElementById('bankCategoryFilter').value;
+    bankList.innerHTML = 'Memuat...';
+    fetch(
+            `get_bank_questions.php?test_id=${wizardData.details.test_id}&page=${page}&search=${search}&category=${category}`)
+        .then(res => res.json()).then(data => {
+            bankList.innerHTML = data.questions.map(q =>
+                `<label class="flex items-center p-2 rounded hover:bg-gray-200"><input type="checkbox" data-id="${q.id}" data-text="${q.question_text}" class="h-4 w-4 bank-checkbox">${q.question_text.substring(0,80)}...</label>`
+            ).join('');
+        });
+}
+
+function addSelectedQuestions() {
+    const assembledList = document.getElementById('sortable-list');
+    document.querySelectorAll('#bank-questions-list input:checked').forEach(cb => {
+        const questionId = cb.dataset.id;
+        const existingIds = Array.from(assembledList.children).map(item => item.dataset.id);
+        if (!existingIds.includes(questionId)) {
+            const question = {
+                id: questionId,
+                question_text: cb.dataset.text,
+                points: 1.00
+            };
+            wizardData.questions.push(question);
+            assembledList.innerHTML += renderAssembledQuestion(question);
+        }
+        cb.checked = false;
+    });
+}
+
+function removeSelectedQuestions() {
+    const assembledList = document.getElementById('sortable-list');
+    const selectedIds = Array.from(assembledList.querySelectorAll('input:checked')).map(cb => cb.dataset.id);
+    wizardData.questions = wizardData.questions.filter(q => !selectedIds.includes(q.id));
+    assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
+}
+
+function renderAssembledQuestion(q) {
+    return `<div class="p-2 border rounded flex items-center bg-white" data-id="${q.id}"><input type="checkbox" class="h-4 w-4 mr-2 assembled-checkbox" data-id="${q.id}"><span class="flex-grow">${q.question_text.substring(0,70)}...</span><input type="number" class="w-20 text-center border rounded mx-2 question-points" value="${parseFloat(q.points).toFixed(2)}" step="0.1"></div>`;
+}
+
+function saveWizard() {
+    wizardData.details.title = document.getElementById('title').value;
+    wizardData.details.category = document.getElementById('category').value;
+    wizardData.details.description = document.getElementById('description').value;
+    wizardData.details.duration = document.getElementById('duration').value;
+
+    const selectedDates = flatpickrInstance.selectedDates;
+
+    /**
+     * PERBAIKAN FINAL: Fungsi ini membuat format tanggal 'YYYY-MM-DD HH:MM:SS' secara manual.
+     * Ini adalah cara yang paling andal untuk menghindari masalah format
+     * yang disebabkan oleh pengaturan lokal atau browser yang berbeda.
+     * @param {Date} date Objek tanggal dari flatpickr
+     * @returns {string|null} String tanggal yang diformat atau null
+     */
+    const formatDateForServer = (date) => {
+        if (!date) return null;
+
+        const pad = (num) => num.toString().padStart(2, '0');
+
+        const year = date.getFullYear();
+        const month = pad(date.getMonth() + 1); // getMonth() dimulai dari 0
+        const day = pad(date.getDate());
+        const hours = pad(date.getHours());
+        const minutes = pad(date.getMinutes());
+        const seconds = pad(date.getSeconds());
+
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+    };
+
+    wizardData.details.availability_start = formatDateForServer(selectedDates[0]);
+    wizardData.details.availability_end = formatDateForServer(selectedDates[1]);
+
+    wizardData.details.passing_grade = document.getElementById('passing_grade').value;
+    wizardData.details.retake_mode = document.getElementById('retake_mode').value;
+
+    wizardData.questions = Array.from(document.getElementById('sortable-list').children).map((item, index) => ({
+        id: item.dataset.id,
+        points: item.querySelector('.question-points').value,
+        order: index + 1
+    }));
+
+    wizardData.assigned_classes = Array.from(document.querySelectorAll('#classList input.class-checkbox:checked')).map(
+        cb => cb.value);
+
+    fetch('process_test_wizard.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(wizardData)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                closeWizard();
+                fetchTests();
+            } else {
+                alert(data.message || 'Gagal menyimpan.');
+            }
+        });
+}
+
+function closeWizard() {
+    document.getElementById('wizardModal').classList.add('hidden');
+}
+
+let testsCurrentPage = 1;
 
 function fetchTests(page = 1) {
-    currentPage = page;
+    testsCurrentPage = page;
     const search = document.getElementById('searchInput').value;
     const category = document.getElementById('categoryFilter').value;
     const container = document.getElementById('tests-table-container');
@@ -188,8 +475,7 @@ function fetchTests(page = 1) {
                     <td class="py-3 px-4"><span class="bg-gray-200 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${test.category}</span></td>
                     <td class="py-3 px-4 text-center font-bold">${parseFloat(test.calculated_total_points).toFixed(2)}</td>
                     <td class="py-3 px-4 text-center">
-                        <a href="assemble_test.php?test_id=${test.id}" class="text-green-500 hover:text-green-700 mr-3" title="Rakit Soal"><i class="fas fa-cogs"></i></a>
-                        <button onclick="openModal('edit', ${test.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="Edit"><i class="fas fa-pencil-alt"></i></button>
+                        <button onclick="openWizard('edit', ${test.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="Edit Ujian"><i class="fas fa-pencil-alt"></i></button>
                         <button onclick="openDeleteModal(${test.id})" class="text-red-500 hover:text-red-700" title="Hapus"><i class="fas fa-trash-alt"></i></button>
                     </td>
                 </tr>`;
@@ -217,52 +503,8 @@ function renderPagination(pagination) {
     }
 }
 
-function openModal(mode, id = null) {
-    const form = document.getElementById('testForm');
-    form.reset();
-    document.getElementById('modalTitle').textContent = mode === 'add' ? 'Tambah Ujian Baru' : 'Edit Ujian';
-    document.getElementById('formAction').value = mode === 'add' ? 'add_test' : 'edit_test';
-    document.getElementById('testId').value = id;
-
-    if (mode === 'edit') {
-        fetch(`get_test_details.php?id=${id}`)
-            .then(res => res.json())
-            .then(result => {
-                if (result.status === 'success') {
-                    const data = result.data;
-                    document.getElementById('title').value = data.title;
-                    document.getElementById('description').value = data.description;
-                    document.getElementById('category').value = data.category;
-                    document.getElementById('duration').value = data.duration;
-                }
-            });
-    }
-    modal.classList.remove('hidden');
-}
-
-function closeModal() {
-    modal.classList.add('hidden');
-}
-
-document.getElementById('testForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    fetch('manage_tests.php', {
-            method: 'POST',
-            body: formData
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === 'success') {
-                closeModal();
-                fetchTests(currentPage);
-                // Simple reload to update category list. A more advanced solution would update it via JS.
-                location.reload();
-            } else {
-                alert(data.message || 'Terjadi kesalahan.');
-            }
-        });
-});
+const deleteModal = document.getElementById('deleteModal');
+let testIdToDelete = null;
 
 function openDeleteModal(id) {
     testIdToDelete = id;
@@ -273,6 +515,7 @@ function closeDeleteModal() {
     testIdToDelete = null;
     deleteModal.classList.add('hidden');
 }
+
 document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
     if (testIdToDelete) {
         const formData = new FormData();
@@ -285,7 +528,7 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', function()
             .then(res => res.json())
             .then(data => {
                 closeDeleteModal();
-                fetchTests(currentPage);
+                fetchTests(testsCurrentPage);
             });
     }
 });
@@ -294,5 +537,3 @@ document.getElementById('searchInput').addEventListener('keyup', () => fetchTest
 document.getElementById('categoryFilter').addEventListener('change', () => fetchTests(1));
 document.addEventListener('DOMContentLoaded', () => fetchTests());
 </script>
-
-<?php require_once 'footer.php'; ?>

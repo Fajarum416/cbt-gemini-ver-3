@@ -31,8 +31,13 @@ $username = $_SESSION['username'];
     <nav class="bg-white shadow-md">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
-                <div class="flex items-center">
+                <div class="flex items-center space-x-8">
                     <a href="index.php" class="text-2xl font-bold text-blue-600">Aplikasi CBT</a>
+                    <!-- Navigasi Baru Ditambahkan Di Sini -->
+                    <div class="hidden md:flex space-x-6">
+                        <a href="index.php" class="text-gray-600 hover:text-blue-600 font-semibold">Dasbor Ujian</a>
+                        <a href="history.php" class="text-gray-600 hover:text-blue-600 font-semibold">Riwayat Ujian</a>
+                    </div>
                 </div>
                 <div class="flex items-center">
                     <span class="text-gray-600 mr-4">Halo,
