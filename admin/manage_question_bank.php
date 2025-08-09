@@ -79,7 +79,7 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
                     ? ['jpg', 'jpeg', 'png', 'gif']
                     : ['mp3', 'wav', 'ogg'];
                 $max_size = $upload_dir === 'images'
-                    ? 2 * 1024 * 1024 // 2 MB untuk gambar
+                    ? 10 * 1024 * 1024 // 2 MB untuk gambar
                     : 10 * 1024 * 1024; // 10 MB untuk audio
 
                 $filename = basename($_FILES[$file_key]['name']);
