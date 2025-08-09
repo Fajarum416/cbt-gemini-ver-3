@@ -300,8 +300,12 @@ function populateWizardForms() {
     const assembledList = document.getElementById('sortable-list');
     assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
 
+    // --- PERBAIKAN LOGIKA CHECKBOX ---
+    // Ubah semua ID kelas dari database menjadi string agar cocok dengan nilai checkbox.
+    const assignedClassIdsAsString = wizardData.assigned_classes.map(String);
     document.querySelectorAll('#classList input.class-checkbox').forEach(cb => {
-        cb.checked = wizardData.assigned_classes.includes(String(cb.value));
+        // Cek apakah nilai checkbox (string) ada di dalam array ID kelas (yang sudah diubah jadi string).
+        cb.checked = assignedClassIdsAsString.includes(cb.value);
     });
 }
 
@@ -313,7 +317,7 @@ function navigateWizard(direction, toStep = null) {
     }
 
     const steps = [document.getElementById('step1'), document.getElementById('step2'), document.getElementById(
-    'step3')];
+        'step3')];
     steps.forEach((step, index) => step.classList.toggle('hidden', index + 1 !== currentStep));
 
     document.getElementById('backBtn').classList.toggle('hidden', currentStep === 1);
@@ -342,7 +346,8 @@ function fetchBankQuestions(page = 1) {
     const category = document.getElementById('bankCategoryFilter').value;
     bankList.innerHTML = 'Memuat...';
     fetch(
-            `get_bank_questions.php?test_id=${wizardData.details.test_id}&page=${page}&search=${search}&category=${category}`)
+            `get_bank_questions.php?test_id=${wizardData.details.test_id}&page=${page}&search=${search}&category=${category}`
+            )
         .then(res => res.json()).then(data => {
             bankList.innerHTML = data.questions.map(q =>
                 `<label class="flex items-center p-2 rounded hover:bg-gray-200"><input type="checkbox" data-id="${q.id}" data-text="${q.question_text}" class="h-4 w-4 bank-checkbox">${q.question_text.substring(0,80)}...</label>`
@@ -387,25 +392,15 @@ function saveWizard() {
 
     const selectedDates = flatpickrInstance.selectedDates;
 
-    /**
-     * PERBAIKAN FINAL: Fungsi ini membuat format tanggal 'YYYY-MM-DD HH:MM:SS' secara manual.
-     * Ini adalah cara yang paling andal untuk menghindari masalah format
-     * yang disebabkan oleh pengaturan lokal atau browser yang berbeda.
-     * @param {Date} date Objek tanggal dari flatpickr
-     * @returns {string|null} String tanggal yang diformat atau null
-     */
     const formatDateForServer = (date) => {
         if (!date) return null;
-
         const pad = (num) => num.toString().padStart(2, '0');
-
         const year = date.getFullYear();
-        const month = pad(date.getMonth() + 1); // getMonth() dimulai dari 0
+        const month = pad(date.getMonth() + 1);
         const day = pad(date.getDate());
         const hours = pad(date.getHours());
         const minutes = pad(date.getMinutes());
         const seconds = pad(date.getSeconds());
-
         return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
     };
 
