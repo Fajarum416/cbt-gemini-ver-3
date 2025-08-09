@@ -45,7 +45,26 @@ if ($result_main->num_rows == 0) {
 $test_result = $result_main->fetch_assoc();
 $is_passed = $test_result['score'] >= $test_result['passing_grade'];
 
-$sql_review = "SELECT q.question_text, q.options, q.correct_answer, sa.student_answer, sa.is_correct FROM student_answers sa JOIN questions q ON sa.question_id = q.id WHERE sa.test_result_id = ? ORDER BY (SELECT tq.question_order FROM test_questions tq JOIN test_results tr ON tq.test_id = tr.test_id WHERE tr.id = sa.test_result_id AND tq.question_id = sa.question_id)";
+// PERBAIKAN: Tambahkan image_path dan audio_path ke dalam query SELECT
+$sql_review = "
+    SELECT 
+        q.question_text, 
+        q.options, 
+        q.correct_answer, 
+        q.image_path, 
+        q.audio_path,
+        sa.student_answer, 
+        sa.is_correct 
+    FROM student_answers sa 
+    JOIN questions q ON sa.question_id = q.id 
+    WHERE sa.test_result_id = ? 
+    ORDER BY (
+        SELECT tq.question_order 
+        FROM test_questions tq 
+        JOIN test_results tr ON tq.test_id = tr.test_id 
+        WHERE tr.id = sa.test_result_id AND tq.question_id = sa.question_id
+    )";
+
 $stmt_review = $conn->prepare($sql_review);
 $stmt_review->bind_param("i", $result_id);
 $stmt_review->execute();
@@ -53,19 +72,21 @@ $review_questions = $stmt_review->get_result();
 
 $total_questions = $review_questions->num_rows;
 $correct_count = 0;
+// Loop sementara untuk menghitung jawaban benar
+$temp_questions = [];
 while ($q = $review_questions->fetch_assoc()) {
     if ($q['is_correct']) $correct_count++;
+    $temp_questions[] = $q; // Simpan data ke array sementara
 }
 $incorrect_count = $total_questions - $correct_count;
-$review_questions->data_seek(0); // Reset pointer
 ?>
 
 <!-- Tombol Kembali -->
 <div class="mb-6">
     <?php if ($user_role === 'admin'): ?>
-        <a href="../admin/reports.php" class="text-blue-600 hover:underline">&larr; Kembali ke Laporan</a>
+    <a href="../admin/reports.php" class="text-blue-600 hover:underline">&larr; Kembali ke Laporan</a>
     <?php else: ?>
-        <a href="index.php" class="text-blue-600 hover:underline">&larr; Kembali ke Dasbor</a>
+    <a href="index.php" class="text-blue-600 hover:underline">&larr; Kembali ke Dasbor</a>
     <?php endif; ?>
 </div>
 
@@ -80,7 +101,6 @@ $review_questions->data_seek(0); // Reset pointer
         <p class="text-7xl font-bold <?php echo $is_passed ? 'text-green-600' : 'text-red-600'; ?>">
             <?php echo htmlspecialchars(number_format($test_result['score'], 2)); ?>
         </p>
-        <!-- Status Lulus/Gagal -->
         <p class="text-2xl font-bold mt-2 <?php echo $is_passed ? 'text-green-600' : 'text-red-600'; ?>">
             <?php echo $is_passed ? 'LULUS' : 'GAGAL'; ?>
         </p>
@@ -88,7 +108,6 @@ $review_questions->data_seek(0); // Reset pointer
         </p>
     </div>
 
-    <!-- Ringkasan Jawaban -->
     <div class="flex justify-around border-t pt-4">
         <div>
             <p class="text-sm text-gray-500">Total Soal</p>
@@ -114,43 +133,55 @@ $review_questions->data_seek(0); // Reset pointer
             <i id="review-icon" class="fas fa-chevron-down transition-transform"></i>
         </button>
         <div id="review-container" class="p-6 border-t hidden space-y-6">
-            <?php $question_number = 1; ?>
-            <?php while ($q = $review_questions->fetch_assoc()):
+            <?php foreach ($temp_questions as $index => $q):
                 $options = json_decode($q['options'], true);
             ?>
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <p class="font-bold text-gray-800 mb-2">Soal #<?php echo $question_number++; ?></p>
-                    <div class="text-gray-700 mb-4"><?php echo nl2br(htmlspecialchars($q['question_text'])); ?></div>
-                    <div class="space-y-3">
-                        <?php foreach ($options as $key => $value):
+            <div class="bg-gray-50 p-4 rounded-lg">
+                <p class="font-bold text-gray-800 mb-2">Soal #<?php echo $index + 1; ?></p>
+
+                <!-- PERBAIKAN: Tampilkan media (gambar/audio) jika ada -->
+                <?php if (!empty($q['image_path'])): ?>
+                <img src="../<?php echo htmlspecialchars($q['image_path']); ?>" alt="Gambar Soal"
+                    class="mb-4 rounded-lg max-w-md h-auto">
+                <?php endif; ?>
+                <?php if (!empty($q['audio_path'])): ?>
+                <audio controls class="w-full mb-4">
+                    <source src="../<?php echo htmlspecialchars($q['audio_path']); ?>">
+                    Browser Anda tidak mendukung elemen audio.
+                </audio>
+                <?php endif; ?>
+
+                <div class="text-gray-700 mb-4"><?php echo nl2br(htmlspecialchars($q['question_text'])); ?></div>
+                <div class="space-y-3">
+                    <?php foreach ($options as $key => $value):
                             $is_correct_option = ($key == $q['correct_answer']);
                             $is_student_choice = ($key == $q['student_answer']);
                             $bg_class = 'bg-gray-100';
                             if ($is_correct_option) $bg_class = 'bg-green-100 border-green-500';
                             if ($is_student_choice && !$q['is_correct']) $bg_class = 'bg-red-100 border-red-500';
                         ?>
-                            <div class="p-3 border rounded-md <?php echo $bg_class; ?> flex items-center">
-                                <span class="font-semibold mr-3"><?php echo $key; ?>.</span>
-                                <span class="flex-1"><?php echo htmlspecialchars($value); ?></span>
-                                <?php if ($is_student_choice): ?>
-                                    <span class="ml-4 text-sm font-semibold text-blue-700">(Jawaban Anda)</span>
-                                <?php endif; ?>
-                            </div>
-                        <?php endforeach; ?>
+                    <div class="p-3 border rounded-md <?php echo $bg_class; ?> flex items-center">
+                        <span class="font-semibold mr-3"><?php echo $key; ?>.</span>
+                        <span class="flex-1"><?php echo htmlspecialchars($value); ?></span>
+                        <?php if ($is_student_choice): ?>
+                        <span class="ml-4 text-sm font-semibold text-blue-700">(Jawaban Anda)</span>
+                        <?php endif; ?>
                     </div>
+                    <?php endforeach; ?>
                 </div>
-            <?php endwhile; ?>
+            </div>
+            <?php endforeach; ?>
         </div>
     </div>
 </div>
 
 <script>
-    function toggleReview() {
-        const container = document.getElementById('review-container');
-        const icon = document.getElementById('review-icon');
-        container.classList.toggle('hidden');
-        icon.classList.toggle('rotate-180');
-    }
+function toggleReview() {
+    const container = document.getElementById('review-container');
+    const icon = document.getElementById('review-icon');
+    container.classList.toggle('hidden');
+    icon.classList.toggle('rotate-180');
+}
 </script>
 
 <?php
