@@ -113,7 +113,16 @@ $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name 
                 <div><label class="block font-semibold">Jangka Waktu Ujian</label><input type="text"
                         id="availability_range" class="w-full mt-1 p-2 border rounded"
                         placeholder="Pilih rentang tanggal dan waktu"></div>
-                <div class="md:col-span-2">
+
+                <div>
+                    <label for="scoring_method" class="block font-semibold">Metode Penilaian</label>
+                    <select id="scoring_method" class="w-full mt-1 p-2 border rounded">
+                        <option value="points">Berdasarkan Total Poin</option>
+                        <option value="percentage">Berdasarkan Persentase (0-100)</option>
+                    </select>
+                </div>
+
+                <div>
                     <label for="retake_mode" class="block font-semibold">Mode Pengerjaan Ulang</label>
                     <select id="retake_mode" class="w-full mt-1 p-2 border rounded">
                         <option value="0">Hanya Sekali Pengerjaan (Formal)</option>
@@ -128,9 +137,17 @@ $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name 
         <div id="step2" class="p-6 flex-grow overflow-y-auto hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="bg-gray-50 p-4 rounded-lg flex flex-col">
                 <h3 class="text-lg font-semibold mb-2">Soal dalam Ujian</h3>
-                <div class="flex justify-between items-center mb-2"><label class="font-semibold text-sm">Batas Lulus
-                        (KKM)</label><input type="number" id="passing_grade" class="w-24 p-1 border rounded text-center"
-                        value="70.00"></div>
+                <!-- PERBAIKAN: Form KKM dibuat lebih dinamis -->
+                <div class="mb-2">
+                    <div class="flex justify-between items-center">
+                        <label for="passing_grade" class="font-semibold text-sm">Batas Lulus (KKM) <span
+                                id="kkm_unit_label">(Poin)</span></label>
+                        <input type="number" id="passing_grade" class="w-24 p-1 border rounded text-center"
+                            value="70.00">
+                    </div>
+                    <p id="kkm_help_text" class="text-xs text-gray-500 mt-1">Nilai KKM berdasarkan total poin dari soal
+                        yang dirakit.</p>
+                </div>
                 <div id="sortable-list" class="space-y-2 flex-grow overflow-y-auto border p-2 rounded"></div><button
                     onclick="removeSelectedQuestions()"
                     class="mt-2 bg-red-500 text-white text-sm py-1 px-2 rounded">Hapus Terpilih</button>
@@ -208,6 +225,19 @@ let wizardData = {
 let sortableAssembled;
 let flatpickrInstance;
 
+// PERBAIKAN: Event listener untuk dropdown metode penilaian
+document.getElementById('scoring_method').addEventListener('change', function() {
+    const kkmUnitLabel = document.getElementById('kkm_unit_label');
+    const kkmHelpText = document.getElementById('kkm_help_text');
+    if (this.value === 'percentage') {
+        kkmUnitLabel.textContent = '(%)';
+        kkmHelpText.textContent = 'Masukkan nilai KKM antara 0-100.';
+    } else {
+        kkmUnitLabel.textContent = '(Poin)';
+        kkmHelpText.textContent = 'Nilai KKM berdasarkan total poin dari soal yang dirakit.';
+    }
+});
+
 function openWizard(mode, id = 0) {
     currentStep = 1;
     wizardData = {
@@ -266,8 +296,11 @@ function resetWizardForms() {
     document.getElementById('availability_range').value = '';
     document.getElementById('passing_grade').value = '70.00';
     document.getElementById('retake_mode').value = '0';
+    document.getElementById('scoring_method').value = 'points';
     document.getElementById('sortable-list').innerHTML = '';
     document.querySelectorAll('#classList input[type="checkbox"]').forEach(cb => cb.checked = false);
+    // Trigger event untuk reset label KKM
+    document.getElementById('scoring_method').dispatchEvent(new Event('change'));
 }
 
 function populateWizardForms() {
@@ -296,6 +329,9 @@ function populateWizardForms() {
 
     document.getElementById('passing_grade').value = details.passing_grade || '70.00';
     document.getElementById('retake_mode').value = details.retake_mode || '0';
+    document.getElementById('scoring_method').value = details.scoring_method || 'points';
+    // Trigger event untuk update label KKM sesuai data yang dimuat
+    document.getElementById('scoring_method').dispatchEvent(new Event('change'));
 
     const assembledList = document.getElementById('sortable-list');
     assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
@@ -307,7 +343,6 @@ function populateWizardForms() {
         cb.checked = assignedClassIdsAsString.includes(cb.value);
     });
 
-    // Sinkronkan status checkbox "Tugaskan ke SEMUA KELAS"
     updateAssignAllCheckboxState();
 }
 
@@ -411,6 +446,7 @@ function saveWizard() {
 
     wizardData.details.passing_grade = document.getElementById('passing_grade').value;
     wizardData.details.retake_mode = document.getElementById('retake_mode').value;
+    wizardData.details.scoring_method = document.getElementById('scoring_method').value;
 
     wizardData.questions = Array.from(document.getElementById('sortable-list').children).map((item, index) => ({
         id: item.dataset.id,
@@ -530,24 +566,20 @@ document.getElementById('confirmDeleteBtn').addEventListener('click', function()
     }
 });
 
-// --- PERBAIKAN: LOGIKA CHECKBOX "SEMUA KELAS" ---
 const assignToAllCheckbox = document.getElementById('assignToAll');
 const classCheckboxes = document.querySelectorAll('.class-checkbox');
 
-// Fungsi untuk menyinkronkan status checkbox "SEMUA KELAS"
 function updateAssignAllCheckboxState() {
     const allChecked = Array.from(classCheckboxes).every(c => c.checked);
     assignToAllCheckbox.checked = allChecked && classCheckboxes.length > 0;
 }
 
-// Event listener untuk checkbox "SEMUA KELAS"
 assignToAllCheckbox.addEventListener('change', function() {
     classCheckboxes.forEach(cb => {
         cb.checked = this.checked;
     });
 });
 
-// Event listener untuk setiap checkbox kelas individu
 classCheckboxes.forEach(cb => {
     cb.addEventListener('change', function() {
         updateAssignAllCheckboxState();

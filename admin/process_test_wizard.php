@@ -14,15 +14,9 @@ $questions = $input['questions'] ?? [];
 $assigned_classes = $input['assigned_classes'] ?? [];
 $test_id = $details['test_id'] ?? 0;
 
-/**
- * PERBAIKAN: Fungsi validasi untuk memastikan format tanggal adalah 'Y-m-d H:i:s'.
- * Ini mencegah data tanggal yang salah (seperti '00-1-11-30') masuk ke database.
- * @param string $dateString Tanggal yang diterima dari client.
- * @return bool True jika valid, false jika tidak.
- */
 function validateDateTime($dateString)
 {
-    if (empty($dateString)) return true; // Anggap null/kosong sebagai valid
+    if (empty($dateString)) return true;
     $format = 'Y-m-d H:i:s';
     $d = DateTime::createFromFormat($format, $dateString);
     return $d && $d->format($format) === $dateString;
@@ -31,23 +25,26 @@ function validateDateTime($dateString)
 $start = !empty($details['availability_start']) ? $details['availability_start'] : null;
 $end = !empty($details['availability_end']) ? $details['availability_end'] : null;
 
-// Jalankan validasi
 if (!validateDateTime($start) || !validateDateTime($end)) {
     echo json_encode(['status' => 'error', 'message' => 'Format tanggal tidak valid. Gagal menyimpan.']);
     exit;
 }
 
 $retake_mode = $details['retake_mode'] ?? 0;
+// PERBAIKAN: Ambil data metode penilaian dari input
+$scoring_method = $details['scoring_method'] ?? 'points';
 
 $conn->begin_transaction();
 try {
     // Langkah 1: Simpan atau Update Detail Ujian
     if ($test_id > 0) { // Update
-        $stmt = $conn->prepare("UPDATE tests SET title=?, category=?, description=?, duration=?, availability_start=?, availability_end=?, passing_grade=?, retake_mode=? WHERE id=?");
-        $stmt->bind_param("sssisssii", $details['title'], $details['category'], $details['description'], $details['duration'], $start, $end, $details['passing_grade'], $retake_mode, $test_id);
+        // PERBAIKAN: Tambahkan scoring_method ke query UPDATE
+        $stmt = $conn->prepare("UPDATE tests SET title=?, category=?, description=?, duration=?, availability_start=?, availability_end=?, passing_grade=?, retake_mode=?, scoring_method=? WHERE id=?");
+        $stmt->bind_param("sssisssisi", $details['title'], $details['category'], $details['description'], $details['duration'], $start, $end, $details['passing_grade'], $retake_mode, $scoring_method, $test_id);
     } else { // Insert
-        $stmt = $conn->prepare("INSERT INTO tests (title, category, description, duration, availability_start, availability_end, passing_grade, retake_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssisssi", $details['title'], $details['category'], $details['description'], $details['duration'], $start, $end, $details['passing_grade'], $retake_mode);
+        // PERBAIKAN: Tambahkan scoring_method ke query INSERT
+        $stmt = $conn->prepare("INSERT INTO tests (title, category, description, duration, availability_start, availability_end, passing_grade, retake_mode, scoring_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssisssis", $details['title'], $details['category'], $details['description'], $details['duration'], $start, $end, $details['passing_grade'], $retake_mode, $scoring_method);
     }
     $stmt->execute();
     if ($test_id == 0) $test_id = $conn->insert_id;

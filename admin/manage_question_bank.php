@@ -52,6 +52,16 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
 
         if ($action == 'delete_question') {
             $question_id = $_POST['question_id'];
+            $stmt_get = $conn->prepare("SELECT image_path, audio_path FROM questions WHERE id = ?");
+            $stmt_get->bind_param("i", $question_id);
+            $stmt_get->execute();
+            $paths = $stmt_get->get_result()->fetch_assoc();
+            if ($paths) {
+                if ($paths['image_path'] && file_exists('../' . $paths['image_path'])) unlink('../' . $paths['image_path']);
+                if ($paths['audio_path'] && file_exists('../' . $paths['audio_path'])) unlink('../' . $paths['audio_path']);
+            }
+            $stmt_get->close();
+
             $stmt = $conn->prepare("DELETE FROM questions WHERE id = ?");
             $stmt->bind_param("i", $question_id);
             if ($stmt->execute()) {
@@ -64,44 +74,51 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
             exit;
         }
 
-        /**
-         * PERBAIKAN KEAMANAN: Fungsi ini sekarang memvalidasi tipe dan ukuran file.
-         * @param string $file_key Kunci dari array $_FILES (misal: 'image_file').
-         * @param string $upload_dir Sub-folder di dalam 'uploads' (misal: 'images').
-         * @param string &$error_message Variabel untuk menyimpan pesan error.
-         * @return string|null Path file jika berhasil, null jika gagal.
-         */
+        if ($action == 'delete_media') {
+            $question_id = $_POST['question_id'];
+            $media_type = $_POST['media_type'];
+            $column = $media_type === 'image' ? 'image_path' : 'audio_path';
+
+            $stmt_get = $conn->prepare("SELECT $column FROM questions WHERE id = ?");
+            $stmt_get->bind_param("i", $question_id);
+            $stmt_get->execute();
+            $path = $stmt_get->get_result()->fetch_assoc()[$column];
+            $stmt_get->close();
+
+            if ($path && file_exists('../' . $path)) {
+                unlink('../' . $path);
+            }
+
+            $stmt_update = $conn->prepare("UPDATE questions SET $column = NULL WHERE id = ?");
+            $stmt_update->bind_param("i", $question_id);
+            if ($stmt_update->execute()) {
+                echo json_encode(['status' => 'success', 'message' => 'Media berhasil dihapus.']);
+            } else {
+                echo json_encode(['status' => 'error', 'message' => 'Gagal menghapus media dari database.']);
+            }
+            $stmt_update->close();
+            $conn->close();
+            exit;
+        }
+
         function handle_upload($file_key, $upload_dir, &$error_message)
         {
             if (isset($_FILES[$file_key]) && $_FILES[$file_key]['error'] == 0) {
-                // --- VALIDASI KEAMANAN DITAMBAHKAN DI SINI ---
-                $allowed_types = $upload_dir === 'images'
-                    ? ['jpg', 'jpeg', 'png', 'gif']
-                    : ['mp3', 'wav', 'ogg'];
-                $max_size = $upload_dir === 'images'
-                    ? 2 * 1024 * 1024 // 2 MB untuk gambar
-                    : 10 * 1024 * 1024; // 10 MB untuk audio
-
+                $allowed_types = $upload_dir === 'images' ? ['jpg', 'jpeg', 'png', 'gif'] : ['mp3', 'wav', 'ogg'];
+                $max_size = $upload_dir === 'images' ? 2 * 1024 * 1024 : 10 * 1024 * 1024;
                 $filename = basename($_FILES[$file_key]['name']);
                 $file_ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
                 $file_size = $_FILES[$file_key]['size'];
-
-                // 1. Cek tipe file
                 if (!in_array($file_ext, $allowed_types)) {
                     $error_message = "Tipe file tidak diizinkan. Hanya boleh: " . implode(', ', $allowed_types);
                     return null;
                 }
-
-                // 2. Cek ukuran file
                 if ($file_size > $max_size) {
                     $error_message = "Ukuran file terlalu besar. Maksimal: " . ($max_size / 1024 / 1024) . " MB.";
                     return null;
                 }
-                // --- AKHIR VALIDASI KEAMANAN ---
-
                 $new_filename = time() . '_' . $filename;
                 $target_path = '../uploads/' . $upload_dir . '/' . $new_filename;
-
                 if (move_uploaded_file($_FILES[$file_key]['tmp_name'], $target_path)) {
                     return 'uploads/' . $upload_dir . '/' . $new_filename;
                 } else {
@@ -109,7 +126,7 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
                     return null;
                 }
             }
-            return null; // Kembalikan null jika tidak ada file atau ada error upload bawaan
+            return null;
         }
 
         $category = trim($_POST['category']);
@@ -118,7 +135,7 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
         $correct_answer_key = $_POST['correct_answer'] ?? '';
 
         if (empty($category) || empty($question_text) || empty($options_text) || $correct_answer_key === '') {
-            echo json_encode(['status' => 'error', 'message' => 'Semua field wajib diisi, dan pastikan kunci jawaban sudah dipilih.']);
+            echo json_encode(['status' => 'error', 'message' => 'Semua field wajib diisi.']);
             exit;
         }
 
@@ -147,19 +164,30 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
             $stmt->bind_param("ssssss", $category, $question_text, $image_path, $audio_path, $options_json, $correct_answer_key);
         } elseif ($action == 'edit_question') {
             $question_id = $_POST['question_id'];
+
+            $stmt_get = $conn->prepare("SELECT image_path, audio_path FROM questions WHERE id = ?");
+            $stmt_get->bind_param("i", $question_id);
+            $stmt_get->execute();
+            $old_paths = $stmt_get->get_result()->fetch_assoc();
+            $stmt_get->close();
+
             $sql = "UPDATE questions SET category=?, question_text=?, options=?, correct_answer=?";
             $params = [$category, $question_text, $options_json, $correct_answer_key];
             $types = "ssss";
+
             if ($image_path) {
                 $sql .= ", image_path=?";
                 $params[] = $image_path;
                 $types .= "s";
+                if ($old_paths['image_path'] && file_exists('../' . $old_paths['image_path'])) unlink('../' . $old_paths['image_path']);
             }
             if ($audio_path) {
                 $sql .= ", audio_path=?";
                 $params[] = $audio_path;
                 $types .= "s";
+                if ($old_paths['audio_path'] && file_exists('../' . $old_paths['audio_path'])) unlink('../' . $old_paths['audio_path']);
             }
+
             $sql .= " WHERE id=?";
             $params[] = $question_id;
             $types .= "i";
@@ -185,7 +213,6 @@ require_once 'header.php';
 $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY category ASC")->fetch_all(MYSQLI_ASSOC);
 ?>
 
-<!-- Konten HTML lainnya tetap sama -->
 <!-- Filter, Pencarian, dan Tombol Tambah -->
 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
@@ -211,6 +238,7 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
     <div id="pagination-controls" class="p-4 flex justify-between items-center"></div>
 </div>
 
+
 <!-- Modal untuk Tambah/Edit Soal -->
 <div id="questionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
     <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -232,17 +260,23 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
                         <textarea id="question_text" name="question_text" rows="5"
                             class="w-full mt-1 px-4 py-2 border rounded-lg" required></textarea>
                     </div>
+
+                    <!-- PERBAIKAN: Tata letak dikembalikan seperti semula -->
                     <div class="mb-4">
-                        <label for="image_file" class="block font-semibold">Sisipkan Gambar (Opsional)</label>
-                        <input type="file" id="image_file" name="image_file"
-                            class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                        <div id="current_image" class="mt-2"></div>
+                        <label class="block font-semibold">Sisipkan Gambar (Opsional)</label>
+                        <div id="image_upload_container">
+                            <input type="file" id="image_file" name="image_file"
+                                class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                        <div id="current_image_container" class="mt-2"></div>
                     </div>
                     <div class="mb-4">
-                        <label for="audio_file" class="block font-semibold">Sisipkan Audio (Opsional)</label>
-                        <input type="file" id="audio_file" name="audio_file"
-                            class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                        <div id="current_audio" class="mt-2"></div>
+                        <label class="block font-semibold">Sisipkan Audio (Opsional)</label>
+                        <div id="audio_upload_container">
+                            <input type="file" id="audio_file" name="audio_file"
+                                class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                        <div id="current_audio_container" class="mt-2"></div>
                     </div>
                 </div>
 
@@ -284,7 +318,6 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
 </div>
 
 <script>
-    // --- State & Elements ---
     const modal = document.getElementById('questionModal');
     const deleteModal = document.getElementById('deleteModal');
     const searchInput = document.getElementById('searchInput');
@@ -292,7 +325,6 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
     let questionIdToDelete = null;
     let currentPage = 1;
 
-    // --- Semua fungsi JavaScript lainnya tetap sama ---
     function openModal(mode, id = null) {
         const form = document.getElementById('questionForm');
         form.reset();
@@ -300,8 +332,10 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
         document.getElementById('modalTitle').textContent = mode === 'add' ? 'Tambah Soal Baru' : 'Edit Soal';
         document.getElementById('formAction').value = mode === 'add' ? 'add_question' : 'edit_question';
         document.getElementById('questionId').value = id;
-        document.getElementById('current_image').innerHTML = '';
-        document.getElementById('current_audio').innerHTML = '';
+        document.getElementById('current_image_container').innerHTML = '';
+        document.getElementById('current_audio_container').innerHTML = '';
+        document.getElementById('image_upload_container').style.display = 'block';
+        document.getElementById('audio_upload_container').style.display = 'block';
         document.getElementById('form-notification').innerHTML = '';
 
         if (mode === 'edit') {
@@ -312,10 +346,23 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
                         const data = result.data;
                         document.getElementById('category').value = data.category;
                         document.getElementById('question_text').value = data.question_text;
-                        if (data.image_path) document.getElementById('current_image').innerHTML =
-                            `<img src="../${data.image_path}" class="w-32 mt-2 rounded shadow-sm">`;
-                        if (data.audio_path) document.getElementById('current_audio').innerHTML =
-                            `<audio controls class="mt-2 w-full"><source src="../${data.audio_path}"></audio>`;
+
+                        if (data.image_path) {
+                            document.getElementById('image_upload_container').style.display = 'none';
+                            document.getElementById('current_image_container').innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <img src="../${data.image_path}" class="w-32 rounded shadow-sm">
+                                <button type="button" onclick="deleteMedia(${id}, 'image')" class="text-red-500 hover:text-red-700 font-bold" title="Hapus Gambar">&times;</button>
+                            </div>`;
+                        }
+                        if (data.audio_path) {
+                            document.getElementById('audio_upload_container').style.display = 'none';
+                            document.getElementById('current_audio_container').innerHTML = `
+                            <div class="flex items-center gap-4">
+                                <audio controls class="w-full"><source src="../${data.audio_path}"></audio>
+                                <button type="button" onclick="deleteMedia(${id}, 'audio')" class="text-red-500 hover:text-red-700 font-bold" title="Hapus Audio">&times;</button>
+                            </div>`;
+                        }
 
                         if (data.options && typeof data.options === 'object') {
                             Object.entries(data.options).forEach(([key, value]) => {
@@ -331,7 +378,15 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
         modal.classList.remove('hidden');
     }
 
+    // PERBAIKAN: Fungsi closeModal sekarang akan menghentikan semua audio yang berjalan
     function closeModal() {
+        const audios = modal.querySelectorAll('audio');
+        audios.forEach(audio => {
+            if (!audio.paused) {
+                audio.pause();
+                audio.currentTime = 0;
+            }
+        });
         modal.classList.add('hidden');
     }
 
@@ -422,6 +477,33 @@ $categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY cat
                 });
         }
     });
+
+    function deleteMedia(questionId, mediaType) {
+        if (!confirm('Anda yakin ingin menghapus media ini secara permanen?')) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('action', 'delete_media');
+        formData.append('question_id', questionId);
+        formData.append('media_type', mediaType);
+
+        fetch('manage_question_bank.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const previewContainer = document.getElementById(`current_${mediaType}_container`);
+                    const uploadContainer = document.getElementById(`${mediaType}_upload_container`);
+                    previewContainer.innerHTML = '';
+                    uploadContainer.style.display = 'block';
+                } else {
+                    alert('Gagal menghapus media: ' + data.message);
+                }
+            });
+    }
 
     function fetchQuestions(page = 1) {
         currentPage = page;

@@ -69,50 +69,50 @@ if (empty($questions)) {
     <div class="w-full lg:w-3/4">
         <form id="test-form" action="submit_test.php" method="post">
             <input type="hidden" name="test_result_id" value="<?php echo $test_result_id; ?>">
-            <?php foreach ($questions as $index => $q): 
+            <?php foreach ($questions as $index => $q):
                 $options = json_decode($q['options'], true);
             ?>
-            <div id="question-<?php echo $index; ?>" class="question-card bg-white p-8 rounded-xl shadow-lg"
-                style="display:none;">
-                <div class="flex justify-between items-start mb-4">
-                    <span class="text-lg font-bold text-blue-600">Soal Nomor <?php echo $index + 1; ?></span>
-                </div>
+                <div id="question-<?php echo $index; ?>" class="question-card bg-white p-8 rounded-xl shadow-lg"
+                    style="display:none;">
+                    <div class="flex justify-between items-start mb-4">
+                        <span class="text-lg font-bold text-blue-600">Soal Nomor <?php echo $index + 1; ?></span>
+                    </div>
 
-                <!-- Tampilkan Media Jika Ada -->
-                <?php if (!empty($q['image_path'])): ?>
-                <img src="../<?php echo htmlspecialchars($q['image_path']); ?>" alt="Gambar Soal"
-                    class="mb-4 rounded-lg max-w-full h-auto">
-                <?php endif; ?>
-                <?php if (!empty($q['audio_path'])): ?>
-                <audio controls class="w-full mb-4">
-                    <source src="../<?php echo htmlspecialchars($q['audio_path']); ?>">
-                    Browser Anda tidak mendukung elemen audio.
-                </audio>
-                <?php endif; ?>
+                    <!-- Tampilkan Media Jika Ada -->
+                    <?php if (!empty($q['image_path'])): ?>
+                        <img src="../<?php echo htmlspecialchars($q['image_path']); ?>" alt="Gambar Soal"
+                            class="mb-4 rounded-lg max-w-full h-auto">
+                    <?php endif; ?>
+                    <?php if (!empty($q['audio_path'])): ?>
+                        <audio controls class="w-full mb-4">
+                            <source src="../<?php echo htmlspecialchars($q['audio_path']); ?>">
+                            Browser Anda tidak mendukung elemen audio.
+                        </audio>
+                    <?php endif; ?>
 
-                <div class="text-gray-800 text-lg mb-6">
-                    <?php echo nl2br(htmlspecialchars($q['question_text'])); ?>
+                    <div class="text-gray-800 text-lg mb-6">
+                        <?php echo nl2br(htmlspecialchars($q['question_text'])); ?>
+                    </div>
+                    <div class="space-y-4">
+                        <?php foreach ($options as $key => $value): ?>
+                            <label
+                                class="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
+                                <input type="radio" name="answers[<?php echo $q['id']; ?>]" value="<?php echo $key; ?>"
+                                    class="h-5 w-5" <?php echo ($q['student_answer'] == $key) ? 'checked' : ''; ?>>
+                                <span class="ml-4 text-gray-700"><?php echo htmlspecialchars($value); ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <!-- Tombol Navigasi Next/Back -->
+                    <div class="flex justify-between mt-8 border-t pt-6">
+                        <button type="button" id="prev-btn-<?php echo $index; ?>" onclick="prevQuestion()"
+                            class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg">&larr;
+                            Kembali</button>
+                        <button type="button" id="next-btn-<?php echo $index; ?>" onclick="nextQuestion()"
+                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Lanjut
+                            &rarr;</button>
+                    </div>
                 </div>
-                <div class="space-y-4">
-                    <?php foreach($options as $key => $value): ?>
-                    <label
-                        class="flex items-center p-4 border rounded-lg cursor-pointer hover:bg-blue-50 transition-colors">
-                        <input type="radio" name="answers[<?php echo $q['id']; ?>]" value="<?php echo $key; ?>"
-                            class="h-5 w-5" <?php echo ($q['student_answer'] == $key) ? 'checked' : ''; ?>>
-                        <span class="ml-4 text-gray-700"><?php echo htmlspecialchars($value); ?></span>
-                    </label>
-                    <?php endforeach; ?>
-                </div>
-                <!-- Tombol Navigasi Next/Back -->
-                <div class="flex justify-between mt-8 border-t pt-6">
-                    <button type="button" id="prev-btn-<?php echo $index; ?>" onclick="prevQuestion()"
-                        class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg">&larr;
-                        Kembali</button>
-                    <button type="button" id="next-btn-<?php echo $index; ?>" onclick="nextQuestion()"
-                        class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg">Lanjut
-                        &rarr;</button>
-                </div>
-            </div>
             <?php endforeach; ?>
         </form>
     </div>
@@ -128,10 +128,10 @@ if (empty($questions)) {
                 <h3 class="font-semibold text-gray-700 mb-4 text-center">Navigasi Soal</h3>
                 <div class="grid grid-cols-5 gap-2">
                     <?php foreach ($questions as $index => $q): ?>
-                    <button onclick="showQuestion(<?php echo $index; ?>)" id="nav-btn-<?php echo $index; ?>"
-                        class="nav-btn h-10 w-10 rounded-md flex items-center justify-center font-bold <?php echo !empty($q['student_answer']) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'; ?>">
-                        <?php echo $index + 1; ?>
-                    </button>
+                        <button onclick="showQuestion(<?php echo $index; ?>)" id="nav-btn-<?php echo $index; ?>"
+                            class="nav-btn h-10 w-10 rounded-md flex items-center justify-center font-bold <?php echo !empty($q['student_answer']) ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'; ?>">
+                            <?php echo $index + 1; ?>
+                        </button>
                     <?php endforeach; ?>
                 </div>
                 <button onclick="openFinishModal()"
@@ -160,87 +160,98 @@ if (empty($questions)) {
 
 
 <script>
-let currentQuestionIndex = 0;
-const totalQuestions = <?php echo count($questions); ?>;
-const questionCards = document.querySelectorAll('.question-card');
-const navButtons = document.querySelectorAll('.nav-btn');
-const finishModal = document.getElementById('finishModal');
+    let currentQuestionIndex = 0;
+    const totalQuestions = <?php echo count($questions); ?>;
+    const questionCards = document.querySelectorAll('.question-card');
+    const navButtons = document.querySelectorAll('.nav-btn');
+    const finishModal = document.getElementById('finishModal');
 
-function showQuestion(index) {
-    if (index < 0 || index >= totalQuestions) return;
+    function showQuestion(index) {
+        if (index < 0 || index >= totalQuestions) return;
 
-    questionCards[currentQuestionIndex].style.display = 'none';
-    navButtons[currentQuestionIndex].classList.remove('border-blue-500', 'border-2');
-
-    questionCards[index].style.display = 'block';
-    navButtons[index].classList.add('border-blue-500', 'border-2');
-
-    currentQuestionIndex = index;
-    updateNavButtons();
-}
-
-function nextQuestion() {
-    showQuestion(currentQuestionIndex + 1);
-}
-
-function prevQuestion() {
-    showQuestion(currentQuestionIndex - 1);
-}
-
-function updateNavButtons() {
-    for (let i = 0; i < totalQuestions; i++) {
-        const prevBtn = document.getElementById(`prev-btn-${i}`);
-        const nextBtn = document.getElementById(`next-btn-${i}`);
-        if (i === 0) prevBtn.disabled = true;
-        else prevBtn.disabled = false;
-        if (i === totalQuestions - 1) nextBtn.disabled = true;
-        else nextBtn.disabled = false;
-    }
-}
-
-document.querySelectorAll('input[type="radio"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        const questionId = this.name.match(/\[(\d+)\]/)[1];
-        for (let i = 0; i < totalQuestions; i++) {
-            if (document.querySelector(`#question-${i} input[name="answers[${questionId}]"]`)) {
-                document.getElementById(`nav-btn-${i}`).classList.remove('bg-gray-200');
-                document.getElementById(`nav-btn-${i}`).classList.add('bg-green-500', 'text-white');
-                break;
+        // --- PERBAIKAN: Hentikan audio yang sedang berjalan di soal saat ini ---
+        const currentCard = questionCards[currentQuestionIndex];
+        const audios = currentCard.querySelectorAll('audio');
+        audios.forEach(audio => {
+            if (!audio.paused) {
+                audio.pause();
+                audio.currentTime = 0; // Mengembalikan audio ke awal
             }
-        }
-    });
-});
+        });
+        // --- AKHIR PERBAIKAN ---
 
-const timerElement = document.getElementById('timer');
-let timeLeft = <?php echo $time_remaining; ?>;
-const timerInterval = setInterval(() => {
-    if (timeLeft <= 0) {
-        clearInterval(timerInterval);
-        timerElement.textContent = "Waktu Habis!";
-        submitTest();
-        return;
+        questionCards[currentQuestionIndex].style.display = 'none';
+        navButtons[currentQuestionIndex].classList.remove('border-blue-500', 'border-2');
+
+        questionCards[index].style.display = 'block';
+        navButtons[index].classList.add('border-blue-500', 'border-2');
+
+        currentQuestionIndex = index;
+        updateNavButtons();
     }
-    timeLeft--;
-    let hours = Math.floor(timeLeft / 3600);
-    let minutes = Math.floor((timeLeft % 3600) / 60);
-    let seconds = timeLeft % 60;
-    timerElement.textContent =
-        `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}, 1000);
 
-function openFinishModal() {
-    finishModal.classList.remove('hidden');
-}
+    function nextQuestion() {
+        showQuestion(currentQuestionIndex + 1);
+    }
 
-function closeFinishModal() {
-    finishModal.classList.add('hidden');
-}
+    function prevQuestion() {
+        showQuestion(currentQuestionIndex - 1);
+    }
 
-function submitTest() {
-    document.getElementById('test-form').submit();
-}
+    function updateNavButtons() {
+        for (let i = 0; i < totalQuestions; i++) {
+            const prevBtn = document.getElementById(`prev-btn-${i}`);
+            const nextBtn = document.getElementById(`next-btn-${i}`);
+            if (i === 0) prevBtn.disabled = true;
+            else prevBtn.disabled = false;
+            if (i === totalQuestions - 1) nextBtn.disabled = true;
+            else nextBtn.disabled = false;
+        }
+    }
 
-showQuestion(0);
+    document.querySelectorAll('input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const questionId = this.name.match(/\[(\d+)\]/)[1];
+            for (let i = 0; i < totalQuestions; i++) {
+                if (document.querySelector(`#question-${i} input[name="answers[${questionId}]"]`)) {
+                    document.getElementById(`nav-btn-${i}`).classList.remove('bg-gray-200');
+                    document.getElementById(`nav-btn-${i}`).classList.add('bg-green-500', 'text-white');
+                    break;
+                }
+            }
+        });
+    });
+
+    const timerElement = document.getElementById('timer');
+    let timeLeft = <?php echo $time_remaining; ?>;
+    const timerInterval = setInterval(() => {
+        if (timeLeft <= 0) {
+            clearInterval(timerInterval);
+            timerElement.textContent = "Waktu Habis!";
+            submitTest();
+            return;
+        }
+        timeLeft--;
+        let hours = Math.floor(timeLeft / 3600);
+        let minutes = Math.floor((timeLeft % 3600) / 60);
+        let seconds = timeLeft % 60;
+        timerElement.textContent =
+            `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }, 1000);
+
+    function openFinishModal() {
+        finishModal.classList.remove('hidden');
+    }
+
+    function closeFinishModal() {
+        finishModal.classList.add('hidden');
+    }
+
+    function submitTest() {
+        document.getElementById('test-form').submit();
+    }
+
+    showQuestion(0);
 </script>
 
 <?php require_once 'footer.php'; ?>

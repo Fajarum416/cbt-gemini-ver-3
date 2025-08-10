@@ -4,7 +4,6 @@ require_once 'header.php';
 
 // 1. Validasi request dan data yang dikirim
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['test_result_id']) || !is_numeric($_POST['test_result_id'])) {
-    // Jika akses tidak sah, redirect ke dasbor
     header("Location: index.php");
     exit;
 }
@@ -12,43 +11,48 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['test_result_id']) ||
 $test_result_id = $_POST['test_result_id'];
 $student_answers = isset($_POST['answers']) ? $_POST['answers'] : [];
 
-// 2. Ambil semua kunci jawaban untuk soal-soal dalam ujian ini
-// Ini lebih efisien daripada query satu per satu di dalam loop
-$sql_correct_answers = "
-    SELECT q.id, q.correct_answer 
+// 2. PERBAIKAN: Ambil kunci jawaban DAN poin untuk setiap soal dalam ujian ini
+$sql_question_data = "
+    SELECT 
+        q.id, 
+        q.correct_answer,
+        tq.points 
     FROM questions q
     JOIN test_questions tq ON q.id = tq.question_id
     JOIN test_results tr ON tq.test_id = tr.test_id
     WHERE tr.id = ?";
 
-$stmt_keys = $conn->prepare($sql_correct_answers);
+$stmt_keys = $conn->prepare($sql_question_data);
 $stmt_keys->bind_param("i", $test_result_id);
 $stmt_keys->execute();
 $result_keys = $stmt_keys->get_result();
 
-$correct_answers_map = [];
+$question_data_map = [];
 while ($row = $result_keys->fetch_assoc()) {
-    $correct_answers_map[$row['id']] = $row['correct_answer'];
+    $question_data_map[$row['id']] = [
+        'correct_answer' => $row['correct_answer'],
+        'points' => (float)$row['points'] // Simpan poin untuk setiap soal
+    ];
 }
 $stmt_keys->close();
 
 // 3. Proses dan simpan jawaban siswa
-$total_questions = count($correct_answers_map);
-$correct_count = 0;
+$total_score = 0; // Gunakan variabel ini untuk mengakumulasi skor
 
-// Hapus jawaban lama jika ada (untuk kasus re-submit, meskipun jarang terjadi)
+// Hapus jawaban lama jika ada
 $conn->prepare("DELETE FROM student_answers WHERE test_result_id = ?")->execute([$test_result_id]);
 
 // Siapkan statement untuk memasukkan jawaban baru
 $sql_insert_answer = "INSERT INTO student_answers (test_result_id, question_id, student_answer, is_correct) VALUES (?, ?, ?, ?)";
 $stmt_insert = $conn->prepare($sql_insert_answer);
 
-foreach ($correct_answers_map as $question_id => $correct_key) {
+foreach ($question_data_map as $question_id => $data) {
     $student_answer = isset($student_answers[$question_id]) ? $student_answers[$question_id] : null;
-    $is_correct = ($student_answer === $correct_key) ? 1 : 0;
+    $is_correct = ($student_answer === $data['correct_answer']) ? 1 : 0;
 
+    // PERBAIKAN: Jika jawaban benar, tambahkan poin soal ke total skor
     if ($is_correct) {
-        $correct_count++;
+        $total_score += $data['points'];
     }
 
     $stmt_insert->bind_param("iisi", $test_result_id, $question_id, $student_answer, $is_correct);
@@ -56,10 +60,8 @@ foreach ($correct_answers_map as $question_id => $correct_key) {
 }
 $stmt_insert->close();
 
-// 4. Hitung skor akhir
-// Skor = (Jumlah Jawaban Benar / Jumlah Total Soal) * 100
-$score = ($total_questions > 0) ? ($correct_count / $total_questions) * 100 : 0;
-$score = round($score, 2); // Bulatkan menjadi 2 angka di belakang koma
+// 4. PERBAIKAN: Skor akhir adalah total skor yang sudah dihitung
+$score = round($total_score, 2);
 
 // 5. Update tabel test_results dengan skor, waktu selesai, dan status 'completed'
 $end_time = date('Y-m-d H:i:s');

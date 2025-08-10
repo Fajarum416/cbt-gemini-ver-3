@@ -1,0 +1,6 @@
+# Memberi tahu server tipe file yang benar untuk media
+# Ini akan membuat browser memutar file, bukan mengunduhnya.
+
+AddType audio/mpeg .mp3
+AddType audio/wav .wav
+AddType audio/ogg .ogg
