@@ -1,11 +1,13 @@
 <?php
 // Set timezone
 date_default_timezone_set('Asia/Jakarta');
+
 // --- BAGIAN INI HANYA UNTUK AJAX REQUEST ---
 if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
     require_once '../includes/config.php';
     header('Content-Type: application/json');
 
+    // Aksi untuk mengambil daftar ujian
     if (isset($_GET['fetch_list'])) {
         $limit = 10;
         $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
@@ -48,6 +50,7 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
         exit;
     }
 
+    // Aksi untuk menghapus ujian
     if (isset($_POST['action']) && $_POST['action'] == 'delete_test') {
         $stmt = $conn->prepare("DELETE FROM tests WHERE id = ?");
         $stmt->bind_param("i", $_POST['test_id']);
@@ -60,8 +63,10 @@ if (isset($_GET['fetch_list']) || isset($_POST['action'])) {
 
 $page_title = 'Manajemen Ujian';
 require_once 'header.php';
+
+// Ambil data untuk dropdown filter
 $categories = $conn->query("SELECT DISTINCT category FROM tests ORDER BY category ASC")->fetch_all(MYSQLI_ASSOC);
-$question_categories = $conn->query("SELECT DISTINCT category FROM questions ORDER BY category ASC")->fetch_all(MYSQLI_ASSOC);
+$question_packages = $conn->query("SELECT id, package_name FROM question_packages ORDER BY package_name ASC")->fetch_all(MYSQLI_ASSOC);
 $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name ASC")->fetch_all(MYSQLI_ASSOC);
 ?>
 <!-- CDN untuk Flatpickr (Date Range Picker) -->
@@ -74,7 +79,7 @@ $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name 
         <input type="text" id="searchInput" placeholder="Cari judul ujian..."
             class="w-full px-4 py-2 border rounded-lg col-span-1 md:col-span-2">
         <select id="categoryFilter" class="w-full px-4 py-2 border rounded-lg">
-            <option value="">Semua Kategori</option>
+            <option value="">Semua Kategori Ujian</option>
             <?php foreach ($categories as $cat): ?>
             <option value="<?php echo htmlspecialchars($cat['category']); ?>">
                 <?php echo htmlspecialchars($cat['category']); ?></option>
@@ -113,15 +118,6 @@ $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name 
                 <div><label class="block font-semibold">Jangka Waktu Ujian</label><input type="text"
                         id="availability_range" class="w-full mt-1 p-2 border rounded"
                         placeholder="Pilih rentang tanggal dan waktu"></div>
-
-                <div>
-                    <label for="scoring_method" class="block font-semibold">Metode Penilaian</label>
-                    <select id="scoring_method" class="w-full mt-1 p-2 border rounded">
-                        <option value="points">Berdasarkan Total Poin</option>
-                        <option value="percentage">Berdasarkan Persentase (0-100)</option>
-                    </select>
-                </div>
-
                 <div>
                     <label for="retake_mode" class="block font-semibold">Mode Pengerjaan Ulang</label>
                     <select id="retake_mode" class="w-full mt-1 p-2 border rounded">
@@ -137,65 +133,89 @@ $classes = $conn->query("SELECT id, class_name FROM classes ORDER BY class_name 
         <div id="step2" class="p-6 flex-grow overflow-y-auto hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div class="bg-gray-50 p-4 rounded-lg flex flex-col">
                 <h3 class="text-lg font-semibold mb-2">Soal dalam Ujian</h3>
-                <!-- PERBAIKAN: Form KKM dibuat lebih dinamis -->
-                <div class="mb-2">
-                    <div class="flex justify-between items-center">
-                        <label for="passing_grade" class="font-semibold text-sm">Batas Lulus (KKM) <span
-                                id="kkm_unit_label">(Poin)</span></label>
-                        <input type="number" id="passing_grade" class="w-24 p-1 border rounded text-center"
-                            value="70.00">
+
+                <div class="bg-white border rounded-lg p-3 mb-4 space-y-3 shadow-sm">
+                    <div>
+                        <label for="scoring_method" class="block font-semibold text-sm">Metode Penilaian</label>
+                        <select id="scoring_method" class="w-full mt-1 p-2 border rounded-md">
+                            <option value="points">Berdasarkan Total Poin</option>
+                            <option value="percentage">Berdasarkan Persentase</option>
+                        </select>
                     </div>
-                    <p id="kkm_help_text" class="text-xs text-gray-500 mt-1">Nilai KKM berdasarkan total poin dari soal
-                        yang dirakit.</p>
+                    <div>
+                        <label for="passing_grade" id="kkm_label" class="block font-semibold text-sm">Batas Lulus
+                            (KKM)</label>
+                        <div class="flex items-center">
+                            <input type="number" id="passing_grade" class="w-28 p-2 border rounded-md text-center"
+                                value="70.00" step="0.1">
+                            <span id="kkm_unit" class="ml-2 font-semibold text-gray-600"></span>
+                        </div>
+                    </div>
+                    <div id="total_points_container" class="border-t pt-2 mt-2">
+                        <p class="text-sm text-gray-600">Total Poin Ujian: <strong id="total_points_display"
+                                class="text-blue-600 text-lg">0.00</strong></p>
+                    </div>
                 </div>
-                <div id="sortable-list" class="space-y-2 flex-grow overflow-y-auto border p-2 rounded"></div><button
-                    onclick="removeSelectedQuestions()"
-                    class="mt-2 bg-red-500 text-white text-sm py-1 px-2 rounded">Hapus Terpilih</button>
+
+                <div id="sortable-list"
+                    class="space-y-2 flex-grow overflow-y-auto border p-2 rounded bg-white min-h-[200px]"></div>
+                <button onclick="removeSelectedQuestions()"
+                    class="mt-2 bg-red-500 hover:bg-red-600 text-white text-sm py-1 px-2 rounded">Hapus
+                    Terpilih</button>
             </div>
             <div class="bg-gray-50 p-4 rounded-lg flex flex-col">
                 <h3 class="text-lg font-semibold mb-2">Bank Soal</h3>
                 <div class="grid grid-cols-2 gap-2 mb-2">
                     <input type="text" id="bankSearch" placeholder="Cari soal..." class="w-full p-2 border rounded">
-                    <select id="bankCategoryFilter" class="w-full p-2 border rounded">
-                        <option value="">Semua Kategori Soal</option>
-                        <?php foreach ($question_categories as $cat): ?>
-                        <option value="<?php echo htmlspecialchars($cat['category']); ?>">
-                            <?php echo htmlspecialchars($cat['category']); ?></option>
+                    <select id="bankPackageFilter" class="w-full p-2 border rounded">
+                        <option value="">Semua Paket Soal</option>
+                        <?php foreach ($question_packages as $pkg): ?>
+                        <option value="<?php echo $pkg['id']; ?>">
+                            <?php echo htmlspecialchars($pkg['package_name']); ?>
+                        </option>
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div id="bank-questions-list" class="space-y-2 flex-grow overflow-y-auto border p-2 rounded"></div>
+                <div id="bank-questions-list"
+                    class="space-y-2 flex-grow overflow-y-auto border p-2 rounded bg-white min-h-[200px]"></div>
                 <div id="bank-pagination" class="mt-2 text-center"></div>
-                <button onclick="addSelectedQuestions()" class="mt-2 bg-blue-500 text-white py-1 px-2 rounded">Tambahkan
-                    Terpilih</button>
+                <button onclick="addSelectedQuestions()"
+                    class="mt-2 bg-blue-500 hover:bg-blue-600 text-white py-1 px-2 rounded">Tambahkan Terpilih</button>
             </div>
         </div>
 
         <!-- Step 3: Tugaskan Kelas -->
         <div id="step3" class="p-6 overflow-y-auto hidden">
             <h3 class="text-lg font-semibold mb-4">Tugaskan Ujian ke Kelas</h3>
-            <div id="classList" class="space-y-2"><label
-                    class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer"><input type="checkbox"
-                        id="assignToAll" class="h-4 w-4 rounded"><span class="ml-3 font-bold">Tugaskan ke SEMUA
-                        KELAS</span></label>
-                <hr class="my-2"><?php foreach ($classes as $class): ?><label
-                    class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer"><input type="checkbox"
-                        name="class_ids[]" value="<?php echo $class['id']; ?>"
-                        class="h-4 w-4 rounded class-checkbox"><span
-                        class="ml-3"><?php echo htmlspecialchars($class['class_name']); ?></span></label><?php endforeach; ?>
+            <div id="classList" class="space-y-2">
+                <label class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer">
+                    <input type="checkbox" id="assignToAll" class="h-4 w-4 rounded"><span
+                        class="ml-3 font-bold">Tugaskan ke SEMUA KELAS</span>
+                </label>
+                <hr class="my-2">
+                <?php foreach ($classes as $class): ?>
+                <label class="flex items-center p-2 rounded-md hover:bg-gray-100 cursor-pointer">
+                    <input type="checkbox" name="class_ids[]" value="<?php echo $class['id']; ?>"
+                        class="h-4 w-4 rounded class-checkbox">
+                    <span class="ml-3"><?php echo htmlspecialchars($class['class_name']); ?></span>
+                </label>
+                <?php endforeach; ?>
             </div>
         </div>
 
         <!-- Footer Modal -->
-        <div class="flex justify-between p-6 border-t bg-gray-50"><button onclick="closeWizard()"
+        <div class="flex justify-between p-6 border-t bg-gray-50">
+            <button onclick="closeWizard()"
                 class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Batal</button>
-            <div><button id="backBtn" onclick="navigateWizard(-1)"
-                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded hidden">Kembali</button><button
-                    id="nextBtn" onclick="navigateWizard(1)"
-                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Lanjut</button><button
-                    id="saveBtn" onclick="saveWizard()"
+            <div>
+                <button id="backBtn" onclick="navigateWizard(-1)"
+                    class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded hidden">Kembali</button>
+                <button id="nextBtn" onclick="navigateWizard(1)"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">Lanjut</button>
+                <button id="saveBtn" onclick="saveWizard()"
                     class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded hidden">Simpan
-                    Ujian</button></div>
+                    Ujian</button>
+            </div>
         </div>
     </div>
 </div>
@@ -225,18 +245,25 @@ let wizardData = {
 let sortableAssembled;
 let flatpickrInstance;
 
-// PERBAIKAN: Event listener untuk dropdown metode penilaian
-document.getElementById('scoring_method').addEventListener('change', function() {
-    const kkmUnitLabel = document.getElementById('kkm_unit_label');
-    const kkmHelpText = document.getElementById('kkm_help_text');
-    if (this.value === 'percentage') {
-        kkmUnitLabel.textContent = '(%)';
-        kkmHelpText.textContent = 'Masukkan nilai KKM antara 0-100.';
+function updateKKMUI() {
+    const scoringMethod = document.getElementById('scoring_method').value;
+    const kkmLabel = document.getElementById('kkm_label');
+    const kkmUnit = document.getElementById('kkm_unit');
+    const kkmInput = document.getElementById('passing_grade');
+    const totalPointsContainer = document.getElementById('total_points_container');
+
+    if (scoringMethod === 'percentage') {
+        kkmLabel.textContent = 'Batas Lulus (KKM) dalam %';
+        kkmUnit.textContent = '%';
+        kkmInput.max = 100;
+        totalPointsContainer.style.display = 'none';
     } else {
-        kkmUnitLabel.textContent = '(Poin)';
-        kkmHelpText.textContent = 'Nilai KKM berdasarkan total poin dari soal yang dirakit.';
+        kkmLabel.textContent = 'Batas Lulus (KKM)';
+        kkmUnit.textContent = 'Poin';
+        kkmInput.removeAttribute('max');
+        totalPointsContainer.style.display = 'block';
     }
-});
+}
 
 function openWizard(mode, id = 0) {
     currentStep = 1;
@@ -257,10 +284,8 @@ function openWizard(mode, id = 0) {
     if (mode === 'add') {
         document.getElementById('wizardTitle').textContent = 'Buat Ujian Baru - Langkah 1: Detail Ujian';
         resetWizardForms();
-
         const now = new Date();
         const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
         flatpickrInstance = flatpickr("#availability_range", {
             mode: "range",
             enableTime: true,
@@ -268,7 +293,6 @@ function openWizard(mode, id = 0) {
             time_24hr: true,
             defaultDate: [now, oneWeekLater]
         });
-
         navigateWizard(0, 1);
     } else if (mode === 'edit') {
         document.getElementById('wizardTitle').textContent = 'Edit Ujian - Langkah 1: Detail Ujian';
@@ -294,13 +318,13 @@ function resetWizardForms() {
     document.getElementById('description').value = '';
     document.getElementById('duration').value = '';
     document.getElementById('availability_range').value = '';
-    document.getElementById('passing_grade').value = '70.00';
     document.getElementById('retake_mode').value = '0';
+    document.getElementById('passing_grade').value = '70.00';
     document.getElementById('scoring_method').value = 'points';
     document.getElementById('sortable-list').innerHTML = '';
+    updateTotalPoints();
+    updateKKMUI();
     document.querySelectorAll('#classList input[type="checkbox"]').forEach(cb => cb.checked = false);
-    // Trigger event untuk reset label KKM
-    document.getElementById('scoring_method').dispatchEvent(new Event('change'));
 }
 
 function populateWizardForms() {
@@ -309,40 +333,29 @@ function populateWizardForms() {
     document.getElementById('category').value = details.category || '';
     document.getElementById('description').value = details.description || '';
     document.getElementById('duration').value = details.duration || '';
-
-    if (flatpickrInstance) {
-        flatpickrInstance.destroy();
-    }
-
+    document.getElementById('retake_mode').value = details.retake_mode || '0';
+    if (flatpickrInstance) flatpickrInstance.destroy();
     const dateConfig = {
         mode: "range",
         enableTime: true,
         dateFormat: "Y-m-d H:i",
         time_24hr: true
     };
-
     if (details.availability_start && details.availability_end) {
         dateConfig.defaultDate = [details.availability_start, details.availability_end];
     }
-
     flatpickrInstance = flatpickr("#availability_range", dateConfig);
-
-    document.getElementById('passing_grade').value = details.passing_grade || '70.00';
-    document.getElementById('retake_mode').value = details.retake_mode || '0';
     document.getElementById('scoring_method').value = details.scoring_method || 'points';
-    // Trigger event untuk update label KKM sesuai data yang dimuat
-    document.getElementById('scoring_method').dispatchEvent(new Event('change'));
-
+    document.getElementById('passing_grade').value = details.passing_grade || '70.00';
     const assembledList = document.getElementById('sortable-list');
     assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
-
+    updateTotalPoints();
+    addEventListenersToPointsInputs();
+    updateKKMUI();
     const assignedClassIdsAsString = wizardData.assigned_classes.map(String);
-    const allClassCheckboxes = document.querySelectorAll('#classList input.class-checkbox');
-
-    allClassCheckboxes.forEach(cb => {
+    document.querySelectorAll('#classList input.class-checkbox').forEach(cb => {
         cb.checked = assignedClassIdsAsString.includes(cb.value);
     });
-
     updateAssignAllCheckboxState();
 }
 
@@ -352,73 +365,97 @@ function navigateWizard(direction, toStep = null) {
     } else {
         currentStep += direction;
     }
-
     const steps = [document.getElementById('step1'), document.getElementById('step2'), document.getElementById(
-        'step3')];
+    'step3')];
     steps.forEach((step, index) => step.classList.toggle('hidden', index + 1 !== currentStep));
-
     document.getElementById('backBtn').classList.toggle('hidden', currentStep === 1);
     document.getElementById('nextBtn').classList.toggle('hidden', currentStep === 3);
     document.getElementById('saveBtn').classList.toggle('hidden', currentStep !== 3);
-
     document.getElementById('wizardTitle').textContent =
-        `Langkah ${currentStep}: ${['Detail Ujian', 'Rakit Soal', 'Tugaskan Kelas'][currentStep-1]}`;
-
+        `Langkah ${currentStep}: ${['Detail Ujian', 'Rakit Soal & Penilaian', 'Tugaskan Kelas'][currentStep-1]}`;
     if (currentStep === 2) setupStep2();
 }
 
 function setupStep2() {
     const assembledList = document.getElementById('sortable-list');
+    if (sortableAssembled) sortableAssembled.destroy();
     sortableAssembled = new Sortable(assembledList, {
         animation: 150
     });
     document.getElementById('bankSearch').addEventListener('keyup', () => fetchBankQuestions(1));
-    document.getElementById('bankCategoryFilter').addEventListener('change', () => fetchBankQuestions(1));
+    document.getElementById('bankPackageFilter').addEventListener('change', () => fetchBankQuestions(1));
     fetchBankQuestions();
 }
 
 function fetchBankQuestions(page = 1) {
     const bankList = document.getElementById('bank-questions-list');
     const search = document.getElementById('bankSearch').value;
-    const category = document.getElementById('bankCategoryFilter').value;
-    bankList.innerHTML = 'Memuat...';
-    fetch(
-            `get_bank_questions.php?test_id=${wizardData.details.test_id}&page=${page}&search=${search}&category=${category}`
-            )
-        .then(res => res.json()).then(data => {
-            bankList.innerHTML = data.questions.map(q =>
-                `<label class="flex items-center p-2 rounded hover:bg-gray-200"><input type="checkbox" data-id="${q.id}" data-text="${q.question_text}" class="h-4 w-4 bank-checkbox">${q.question_text.substring(0,80)}...</label>`
-            ).join('');
+    const packageId = document.getElementById('bankPackageFilter').value;
+    bankList.innerHTML = '<div class="p-2 text-gray-500">Memuat...</div>';
+    const testId = wizardData.details.test_id || 0;
+    fetch(`get_bank_questions.php?test_id=${testId}&page=${page}&search=${search}&package_id=${packageId}`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                bankList.innerHTML = data.questions.length > 0 ? data.questions.map(q =>
+                    `<label class="flex items-center p-2 rounded hover:bg-gray-200 cursor-pointer"><input type="checkbox" data-id="${q.id}" data-text="${q.question_text}" class="h-4 w-4 bank-checkbox mr-3">${q.question_text.substring(0,80)}...</label>`
+                ).join('') : '<p class="text-gray-500 p-2">Tidak ada soal ditemukan.</p>';
+            } else {
+                bankList.innerHTML = `<p class="text-red-500 p-2">${data.message || 'Gagal memuat soal.'}</p>`;
+            }
         });
 }
 
 function addSelectedQuestions() {
     const assembledList = document.getElementById('sortable-list');
+    const existingIds = Array.from(assembledList.children).map(item => item.dataset.id);
     document.querySelectorAll('#bank-questions-list input:checked').forEach(cb => {
         const questionId = cb.dataset.id;
-        const existingIds = Array.from(assembledList.children).map(item => item.dataset.id);
         if (!existingIds.includes(questionId)) {
             const question = {
                 id: questionId,
                 question_text: cb.dataset.text,
                 points: 1.00
             };
-            wizardData.questions.push(question);
-            assembledList.innerHTML += renderAssembledQuestion(question);
+            assembledList.insertAdjacentHTML('beforeend', renderAssembledQuestion(question));
         }
         cb.checked = false;
     });
+    updateTotalPoints();
+    addEventListenersToPointsInputs();
 }
 
 function removeSelectedQuestions() {
-    const assembledList = document.getElementById('sortable-list');
-    const selectedIds = Array.from(assembledList.querySelectorAll('input:checked')).map(cb => cb.dataset.id);
-    wizardData.questions = wizardData.questions.filter(q => !selectedIds.includes(q.id));
-    assembledList.innerHTML = wizardData.questions.map(q => renderAssembledQuestion(q)).join('');
+    document.querySelectorAll('#sortable-list input:checked').forEach(cb => {
+        cb.closest('.question-item').remove();
+    });
+    updateTotalPoints();
 }
 
 function renderAssembledQuestion(q) {
-    return `<div class="p-2 border rounded flex items-center bg-white" data-id="${q.id}"><input type="checkbox" class="h-4 w-4 mr-2 assembled-checkbox" data-id="${q.id}"><span class="flex-grow">${q.question_text.substring(0,70)}...</span><input type="number" class="w-20 text-center border rounded mx-2 question-points" value="${parseFloat(q.points).toFixed(2)}" step="0.1"></div>`;
+    return `<div class="p-2 border rounded flex items-center bg-white shadow-sm question-item" data-id="${q.id}">
+                <input type="checkbox" class="h-4 w-4 mr-3 assembled-checkbox" data-id="${q.id}">
+                <span class="flex-grow">${q.question_text.substring(0,70)}...</span>
+                <input type="number" class="w-20 text-center border rounded mx-2 question-points" value="${parseFloat(q.points).toFixed(2)}" step="0.1">
+            </div>`;
+}
+
+function updateTotalPoints() {
+    let totalPoints = 0;
+    document.querySelectorAll('#sortable-list .question-points').forEach(input => {
+        const points = parseFloat(input.value);
+        if (!isNaN(points)) {
+            totalPoints += points;
+        }
+    });
+    document.getElementById('total_points_display').textContent = totalPoints.toFixed(2);
+}
+
+function addEventListenersToPointsInputs() {
+    document.querySelectorAll('#sortable-list .question-points').forEach(input => {
+        input.removeEventListener('change', updateTotalPoints);
+        input.addEventListener('change', updateTotalPoints);
+    });
 }
 
 function saveWizard() {
@@ -426,37 +463,21 @@ function saveWizard() {
     wizardData.details.category = document.getElementById('category').value;
     wizardData.details.description = document.getElementById('description').value;
     wizardData.details.duration = document.getElementById('duration').value;
-
-    const selectedDates = flatpickrInstance.selectedDates;
-
-    const formatDateForServer = (date) => {
-        if (!date) return null;
-        const pad = (num) => num.toString().padStart(2, '0');
-        const year = date.getFullYear();
-        const month = pad(date.getMonth() + 1);
-        const day = pad(date.getDate());
-        const hours = pad(date.getHours());
-        const minutes = pad(date.getMinutes());
-        const seconds = pad(date.getSeconds());
-        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-    };
-
-    wizardData.details.availability_start = formatDateForServer(selectedDates[0]);
-    wizardData.details.availability_end = formatDateForServer(selectedDates[1]);
-
-    wizardData.details.passing_grade = document.getElementById('passing_grade').value;
     wizardData.details.retake_mode = document.getElementById('retake_mode').value;
+    const selectedDates = flatpickrInstance.selectedDates;
+    const formatDate = (date) => date ? date.toISOString().slice(0, 19).replace('T', ' ') : null;
+    wizardData.details.availability_start = formatDate(selectedDates[0]);
+    wizardData.details.availability_end = formatDate(selectedDates[1]);
+    wizardData.details.passing_grade = document.getElementById('passing_grade').value;
     wizardData.details.scoring_method = document.getElementById('scoring_method').value;
-
-    wizardData.questions = Array.from(document.getElementById('sortable-list').children).map((item, index) => ({
+    const assembledItems = document.getElementById('sortable-list').children;
+    wizardData.questions = Array.from(assembledItems).map((item, index) => ({
         id: item.dataset.id,
         points: item.querySelector('.question-points').value,
         order: index + 1
     }));
-
     wizardData.assigned_classes = Array.from(document.querySelectorAll('#classList input.class-checkbox:checked')).map(
         cb => cb.value);
-
     fetch('process_test_wizard.php', {
             method: 'POST',
             headers: {
@@ -487,31 +508,29 @@ function fetchTests(page = 1) {
     const category = document.getElementById('categoryFilter').value;
     const container = document.getElementById('tests-table-container');
     container.innerHTML = '<div class="text-center p-6">Memuat...</div>';
-
     fetch(`manage_tests.php?fetch_list=true&page=${page}&search=${search}&category=${category}`)
         .then(res => res.json())
         .then(data => {
             let tableHTML = `<table class="min-w-full bg-white">
-            <thead class="bg-gray-800 text-white">
-                <tr>
-                    <th class="py-3 px-4 text-left">Judul Ujian</th>
-                    <th class="py-3 px-4 text-left">Kategori</th>
-                    <th class="py-3 px-4 text-center">Total Poin</th>
-                    <th class="py-3 px-4 text-center">Aksi</th>
-                </tr>
-            </thead><tbody>`;
-
+                <thead class="bg-gray-800 text-white">
+                    <tr>
+                        <th class="py-3 px-4 text-left">Judul Ujian</th>
+                        <th class="py-3 px-4 text-left">Kategori</th>
+                        <th class="py-3 px-4 text-center">Total Poin</th>
+                        <th class="py-3 px-4 text-center">Aksi</th>
+                    </tr>
+                </thead><tbody>`;
             if (data.tests.length > 0) {
                 data.tests.forEach(test => {
                     tableHTML += `<tr class="border-b">
-                    <td class="py-3 px-4 font-semibold">${test.title}</td>
-                    <td class="py-3 px-4"><span class="bg-gray-200 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${test.category}</span></td>
-                    <td class="py-3 px-4 text-center font-bold">${parseFloat(test.calculated_total_points).toFixed(2)}</td>
-                    <td class="py-3 px-4 text-center">
-                        <button onclick="openWizard('edit', ${test.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="Edit Ujian"><i class="fas fa-pencil-alt"></i></button>
-                        <button onclick="openDeleteModal(${test.id})" class="text-red-500 hover:text-red-700" title="Hapus"><i class="fas fa-trash-alt"></i></button>
-                    </td>
-                </tr>`;
+                        <td class="py-3 px-4 font-semibold">${test.title}</td>
+                        <td class="py-3 px-4"><span class="bg-gray-200 text-gray-800 text-xs font-medium px-2.5 py-0.5 rounded">${test.category}</span></td>
+                        <td class="py-3 px-4 text-center font-bold">${parseFloat(test.calculated_total_points).toFixed(2)}</td>
+                        <td class="py-3 px-4 text-center">
+                            <button onclick="openWizard('edit', ${test.id})" class="text-blue-500 hover:text-blue-700 mr-3" title="Edit Ujian"><i class="fas fa-pencil-alt"></i></button>
+                            <button onclick="openDeleteModal(${test.id})" class="text-red-500 hover:text-red-700" title="Hapus"><i class="fas fa-trash-alt"></i></button>
+                        </td>
+                    </tr>`;
                 });
             } else {
                 tableHTML += `<tr><td colspan="4" class="text-center py-4">Tidak ada ujian ditemukan.</td></tr>`;
@@ -548,7 +567,6 @@ function closeDeleteModal() {
     testIdToDelete = null;
     deleteModal.classList.add('hidden');
 }
-
 document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
     if (testIdToDelete) {
         const formData = new FormData();
@@ -573,20 +591,21 @@ function updateAssignAllCheckboxState() {
     const allChecked = Array.from(classCheckboxes).every(c => c.checked);
     assignToAllCheckbox.checked = allChecked && classCheckboxes.length > 0;
 }
-
 assignToAllCheckbox.addEventListener('change', function() {
     classCheckboxes.forEach(cb => {
         cb.checked = this.checked;
     });
 });
-
 classCheckboxes.forEach(cb => {
     cb.addEventListener('change', function() {
         updateAssignAllCheckboxState();
     });
 });
 
+document.getElementById('scoring_method').addEventListener('change', updateKKMUI);
 document.getElementById('searchInput').addEventListener('keyup', () => fetchTests(1));
 document.getElementById('categoryFilter').addEventListener('change', () => fetchTests(1));
-document.addEventListener('DOMContentLoaded', () => fetchTests());
+document.addEventListener('DOMContentLoaded', () => {
+    fetchTests();
+});
 </script>

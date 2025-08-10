@@ -118,7 +118,7 @@ $retake_requests = $conn->query($sql_retake_requests);
 <!-- **BARU: Panel Permintaan Ujian Ulang** -->
 <div class="mt-8 bg-white rounded-lg shadow-md">
     <div class="p-4 border-b">
-        <h2 class="text-xl font-bold text-gray-800">Permintaan Ujian Ulang Tertunda</h2>
+        <h2 class="text-xl font-bold text-gray-800">Permintaan Ujian Ulang</h2>
     </div>
     <div class="overflow-x-auto">
         <table class="min-w-full bg-white">
@@ -136,28 +136,28 @@ $retake_requests = $conn->query($sql_retake_requests);
             </thead>
             <tbody class="text-gray-700">
                 <?php if ($retake_requests && $retake_requests->num_rows > 0): ?>
-                <?php while($row = $retake_requests->fetch_assoc()): ?>
-                <tr class="border-b">
-                    <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
-                    <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
-                    <td class="py-3 px-4"><?php echo date('d M Y, H:i', strtotime($row['request_date'])); ?></td>
-                    <td class="py-3 px-4 text-center space-x-2">
-                        <!-- PERBAIKAN DI SINI: Pesan konfirmasi diubah -->
-                        <a href="process_request.php?action=approve&id=<?php echo $row['id']; ?>"
-                            class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded-full"
-                            onclick="return confirm('Anda yakin ingin menyetujui permintaan ini?')">Setujui</a>
-                        <a href="process_request.php?action=reject&id=<?php echo $row['id']; ?>"
-                            class="bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-full"
-                            onclick="return confirm('Anda yakin ingin menolak permintaan ini?')">Tolak</a>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
+                    <?php while ($row = $retake_requests->fetch_assoc()): ?>
+                        <tr class="border-b">
+                            <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
+                            <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
+                            <td class="py-3 px-4"><?php echo date('d M Y, H:i', strtotime($row['request_date'])); ?></td>
+                            <td class="py-3 px-4 text-center space-x-2">
+                                <!-- PERBAIKAN DI SINI: Pesan konfirmasi diubah -->
+                                <a href="process_request.php?action=approve&id=<?php echo $row['id']; ?>"
+                                    class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded-full"
+                                    onclick="return confirm('Anda yakin ingin menyetujui permintaan ini?')">Setujui</a>
+                                <a href="process_request.php?action=reject&id=<?php echo $row['id']; ?>"
+                                    class="bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-full"
+                                    onclick="return confirm('Anda yakin ingin menolak permintaan ini?')">Tolak</a>
+                            </td>
+                        </tr>
+                    <?php endwhile; ?>
                 <?php else: ?>
-                <tr>
-                    <td colspan="4" class="text-center py-6 text-gray-500">
-                        Tidak ada permintaan ujian ulang yang tertunda.
-                    </td>
-                </tr>
+                    <tr>
+                        <td colspan="4" class="text-center py-6 text-gray-500">
+                            Tidak ada permintaan ujian ulang yang tertunda.
+                        </td>
+                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -185,24 +185,24 @@ $retake_requests = $conn->query($sql_retake_requests);
             </thead>
             <tbody class="text-gray-700">
                 <?php if ($latest_results && $latest_results->num_rows > 0): ?>
-                <?php while($row = $latest_results->fetch_assoc()): ?>
-                <tr class="border-b">
-                    <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
-                    <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
-                    <td class="py-3 px-4 text-center">
-                        <span
-                            class="font-bold text-lg <?php echo $row['score'] >= 70 ? 'text-green-600' : 'text-red-600'; ?>">
-                            <?php echo htmlspecialchars(number_format($row['score'], 2)); ?>
-                        </span>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
+                    <?php while ($row = $latest_results->fetch_assoc()): ?>
+                        <tr class="border-b">
+                            <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
+                            <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
+                            <td class="py-3 px-4 text-center">
+                                <span
+                                    class="font-bold text-lg <?php echo $row['score'] >= 70 ? 'text-green-600' : 'text-red-600'; ?>">
+                                    <?php echo htmlspecialchars(number_format($row['score'], 2)); ?>
+                                </span>
+                            </td>
+                        </tr>
+                    <?php endwhile; ?>
                 <?php else: ?>
-                <tr>
-                    <td colspan="3" class="text-center py-6 text-gray-500">
-                        Belum ada aktivitas ujian yang tercatat.
-                    </td>
-                </tr>
+                    <tr>
+                        <td colspan="3" class="text-center py-6 text-gray-500">
+                            Belum ada aktivitas ujian yang tercatat.
+                        </td>
+                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
