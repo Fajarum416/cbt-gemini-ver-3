@@ -18,7 +18,7 @@ define('DB_HOST', 'localhost');
 define('DB_USERNAME', 'u500054717_cbt_app'); // Ganti dengan username database Anda
 
 // Password untuk mengakses database
-define('DB_PASSWORD', 'Y@maguchiid123'); // Ganti dengan password database Anda
+define('DB_PASSWORD', 'Ymiid123'); // Ganti dengan password database Anda
 
 // Nama database yang akan digunakan
 define('DB_NAME', 'u500054717_cbt_app'); // Ganti dengan nama database Anda
