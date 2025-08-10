@@ -15,13 +15,13 @@ if (session_status() == PHP_SESSION_NONE) {
 define('DB_HOST', 'localhost');
 
 // Username untuk mengakses database
-define('DB_USERNAME', 'root'); // Ganti dengan username database Anda
+define('DB_USERNAME', 'u500054717_cbt_app'); // Ganti dengan username database Anda
 
 // Password untuk mengakses database
-define('DB_PASSWORD', ''); // Ganti dengan password database Anda
+define('DB_PASSWORD', 'Y@maguchiid123'); // Ganti dengan password database Anda
 
 // Nama database yang akan digunakan
-define('DB_NAME', 'cbt_app_db'); // Ganti dengan nama database Anda
+define('DB_NAME', 'u500054717_cbt_app'); // Ganti dengan nama database Anda
 
 // =================================================================
 // PROSES KONEKSI
@@ -48,3 +48,9 @@ if (!$conn->set_charset("utf8")) {
 
 // Pengaturan zona waktu default untuk fungsi tanggal dan waktu di PHP
 date_default_timezone_set('Asia/Jakarta');
+
+// --- PERBAIKAN: SINKRONISASI ZONA WAKTU DATABASE ---
+// Baris ini memerintahkan MySQL untuk menggunakan zona waktu WIB (UTC+7)
+// untuk sesi koneksi ini. Ini memastikan fungsi NOW() di SQL
+// akan berjalan pada zona waktu yang sama dengan PHP.
+$conn->query("SET time_zone = '+07:00'");
