@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 10 Agu 2025 pada 06.59
+-- Waktu pembuatan: 18 Agu 2025 pada 05.07
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.2.12
 
@@ -54,12 +54,25 @@ CREATE TABLE `class_members` (
 
 CREATE TABLE `questions` (
   `id` int(11) NOT NULL,
-  `category` varchar(100) NOT NULL DEFAULT 'Umum',
   `question_text` text NOT NULL,
   `image_path` varchar(255) DEFAULT NULL,
   `audio_path` varchar(255) DEFAULT NULL,
+  `package_id` int(11) DEFAULT NULL,
   `options` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`options`)),
   `correct_answer` char(1) NOT NULL COMMENT 'Kunci jawaban, misal: A, B, C, D',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `question_packages`
+--
+
+CREATE TABLE `question_packages` (
+  `id` int(11) NOT NULL,
+  `package_name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -192,6 +205,13 @@ ALTER TABLE `class_members`
 -- Indeks untuk tabel `questions`
 --
 ALTER TABLE `questions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `package_id` (`package_id`);
+
+--
+-- Indeks untuk tabel `question_packages`
+--
+ALTER TABLE `question_packages`
   ADD PRIMARY KEY (`id`);
 
 --
@@ -271,6 +291,12 @@ ALTER TABLE `questions`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `question_packages`
+--
+ALTER TABLE `question_packages`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `retake_requests`
 --
 ALTER TABLE `retake_requests`
@@ -322,6 +348,12 @@ ALTER TABLE `users`
 ALTER TABLE `class_members`
   ADD CONSTRAINT `class_members_ibfk_1` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `class_members_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `questions`
+--
+ALTER TABLE `questions`
+  ADD CONSTRAINT `questions_ibfk_1` FOREIGN KEY (`package_id`) REFERENCES `question_packages` (`id`) ON DELETE SET NULL;
 
 --
 -- Ketidakleluasaan untuk tabel `retake_requests`
