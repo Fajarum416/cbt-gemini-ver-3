@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 09 Agu 2025 pada 05.16
+-- Waktu pembuatan: 10 Agu 2025 pada 06.59
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.2.12
 
@@ -24,6 +24,31 @@ SET time_zone = "+00:00";
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `classes`
+--
+
+CREATE TABLE `classes` (
+  `id` int(11) NOT NULL,
+  `class_name` varchar(100) NOT NULL,
+  `description` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `class_members`
+--
+
+CREATE TABLE `class_members` (
+  `id` int(11) NOT NULL,
+  `class_id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `questions`
 --
 
@@ -36,6 +61,23 @@ CREATE TABLE `questions` (
   `options` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL CHECK (json_valid(`options`)),
   `correct_answer` char(1) NOT NULL COMMENT 'Kunci jawaban, misal: A, B, C, D',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `retake_requests`
+--
+
+CREATE TABLE `retake_requests` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `test_id` int(11) NOT NULL,
+  `test_result_id` int(11) NOT NULL,
+  `request_date` timestamp NOT NULL DEFAULT current_timestamp(),
+  `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `processed_by` int(11) DEFAULT NULL COMMENT 'Admin ID',
+  `processed_date` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -64,7 +106,24 @@ CREATE TABLE `tests` (
   `description` text DEFAULT NULL,
   `category` varchar(100) NOT NULL DEFAULT 'Umum',
   `duration` int(11) NOT NULL COMMENT 'Durasi ujian dalam menit',
+  `availability_start` datetime DEFAULT NULL,
+  `availability_end` datetime DEFAULT NULL,
+  `passing_grade` decimal(5,2) NOT NULL DEFAULT 70.00,
+  `retake_mode` tinyint(1) NOT NULL DEFAULT 0 COMMENT '0=No, 1=Request, 2=Yes',
+  `scoring_method` enum('points','percentage') NOT NULL DEFAULT 'points',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `test_assignments`
+--
+
+CREATE TABLE `test_assignments` (
+  `id` int(11) NOT NULL,
+  `test_id` int(11) NOT NULL,
+  `class_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -116,10 +175,33 @@ CREATE TABLE `users` (
 --
 
 --
+-- Indeks untuk tabel `classes`
+--
+ALTER TABLE `classes`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `class_members`
+--
+ALTER TABLE `class_members`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `class_student_unique` (`class_id`,`student_id`),
+  ADD KEY `student_id` (`student_id`);
+
+--
 -- Indeks untuk tabel `questions`
 --
 ALTER TABLE `questions`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `retake_requests`
+--
+ALTER TABLE `retake_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `student_id` (`student_id`),
+  ADD KEY `test_id` (`test_id`),
+  ADD KEY `test_result_id` (`test_result_id`);
 
 --
 -- Indeks untuk tabel `student_answers`
@@ -134,6 +216,14 @@ ALTER TABLE `student_answers`
 --
 ALTER TABLE `tests`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `test_assignments`
+--
+ALTER TABLE `test_assignments`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `test_class_unique` (`test_id`,`class_id`),
+  ADD KEY `class_id` (`class_id`);
 
 --
 -- Indeks untuk tabel `test_questions`
@@ -163,9 +253,27 @@ ALTER TABLE `users`
 --
 
 --
+-- AUTO_INCREMENT untuk tabel `classes`
+--
+ALTER TABLE `classes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `class_members`
+--
+ALTER TABLE `class_members`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `questions`
 --
 ALTER TABLE `questions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `retake_requests`
+--
+ALTER TABLE `retake_requests`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -178,6 +286,12 @@ ALTER TABLE `student_answers`
 -- AUTO_INCREMENT untuk tabel `tests`
 --
 ALTER TABLE `tests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `test_assignments`
+--
+ALTER TABLE `test_assignments`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -203,11 +317,33 @@ ALTER TABLE `users`
 --
 
 --
+-- Ketidakleluasaan untuk tabel `class_members`
+--
+ALTER TABLE `class_members`
+  ADD CONSTRAINT `class_members_ibfk_1` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `class_members_ibfk_2` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `retake_requests`
+--
+ALTER TABLE `retake_requests`
+  ADD CONSTRAINT `retake_requests_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `retake_requests_ibfk_2` FOREIGN KEY (`test_id`) REFERENCES `tests` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `retake_requests_ibfk_3` FOREIGN KEY (`test_result_id`) REFERENCES `test_results` (`id`) ON DELETE CASCADE;
+
+--
 -- Ketidakleluasaan untuk tabel `student_answers`
 --
 ALTER TABLE `student_answers`
   ADD CONSTRAINT `student_answers_ibfk_1` FOREIGN KEY (`test_result_id`) REFERENCES `test_results` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `student_answers_ibfk_2` FOREIGN KEY (`question_id`) REFERENCES `questions` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `test_assignments`
+--
+ALTER TABLE `test_assignments`
+  ADD CONSTRAINT `test_assignments_ibfk_1` FOREIGN KEY (`test_id`) REFERENCES `tests` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `test_assignments_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE CASCADE;
 
 --
 -- Ketidakleluasaan untuk tabel `test_questions`
