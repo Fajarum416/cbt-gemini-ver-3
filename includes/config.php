@@ -11,17 +11,17 @@ if (session_status() == PHP_SESSION_NONE) {
 // server database Anda.
 // =================================================================
 
-// Alamat server database (biasanya 'localhost')
 define('DB_HOST', 'localhost');
 
 // Username untuk mengakses database
-define('DB_USERNAME', 'root'); // Ganti dengan username database Anda
+define('DB_USERNAME', 'u500054717_cbt_app'); // Ganti dengan username database Anda
 
 // Password untuk mengakses database
-define('DB_PASSWORD', ''); // Ganti dengan password database Anda
+define('DB_PASSWORD', 'Y@maguchi123'); // Ganti dengan password database Anda
 
 // Nama database yang akan digunakan
-define('DB_NAME', 'cbt_app_db'); // Ganti dengan nama database Anda
+define('DB_NAME', 'u500054717_cbt_app'); // Ganti dengan nama database Anda
+
 
 // =================================================================
 // PROSES KONEKSI
