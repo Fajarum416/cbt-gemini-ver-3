@@ -48,10 +48,7 @@ if (!$conn->set_charset("utf8")) {
 
 date_default_timezone_set('Asia/Jakarta');
 
-<<<<<<< HEAD
 // --- PERBAIKAN: SINKRONISASI ZONA WAKTU DATABASE ---
-=======
->>>>>>> 21d4f7254edd1e1f1387d2cf426a3dcb1da4f15f
 // Baris ini memerintahkan MySQL untuk menggunakan zona waktu WIB (UTC+7)
 // untuk sesi koneksi ini. Ini memastikan fungsi NOW() di SQL
 // akan berjalan pada zona waktu yang sama dengan PHP.
