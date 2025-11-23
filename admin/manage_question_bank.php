@@ -246,6 +246,69 @@ require_once 'header.php';
         const questionFormModal = document.getElementById('questionFormModal');
         let currentPackageId = 0;
 
+        // --- Utility Functions ---
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function jsStringEscape(str) {
+            if (str === null || str === undefined) {
+                return '';
+            }
+            return String(str)
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '\\"')
+                .replace(/\n/g, '\\n')
+                .replace(/\r/g, '\\r')
+                .replace(/\t/g, '\\t')
+                .replace(/\f/g, '\\f');
+        }
+
+        function decodeJsString(str) {
+            if (str === null || str === undefined) {
+                return '';
+            }
+            return String(str)
+                .replace(/\\\\/g, '\\')
+                .replace(/\\'/g, "'")
+                .replace(/\\"/g, '"')
+                .replace(/\\n/g, '\n')
+                .replace(/\\r/g, '\r')
+                .replace(/\\t/g, '\t')
+                .replace(/\\f/g, '\f');
+        }
+
+        function showNotification(message, type = 'info') {
+            // Remove existing notification
+            const existingNotification = document.querySelector('.fixed-notification');
+            if (existingNotification) {
+                existingNotification.remove();
+            }
+
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-yellow-500',
+                info: 'bg-blue-500'
+            };
+
+            const notification = document.createElement('div');
+            notification.className = `fixed-notification fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-transform duration-300`;
+            notification.textContent = message;
+
+            document.body.appendChild(notification);
+
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => notification.remove(), 300);
+            }, 5000);
+        }
+
         // --- Fungsi untuk Manajemen Paket Soal ---
 
         function fetchPackages() {
@@ -288,12 +351,15 @@ require_once 'header.php';
                                     </span>
                                 </td>
                                 <td class="py-3 px-4 text-center">
-                                    <button onclick='openQuestionManager(${p.id}, "${escapeHtml(p.package_name)}")' 
+                                    <button onclick="openQuestionManagerFromButton(this, ${p.id})" 
+                                        data-package-name="${jsStringEscape(p.package_name)}"
                                         class="bg-green-500 hover:bg-green-600 text-white text-sm font-bold py-1.5 px-3 rounded transition duration-200"
                                         title="Isi Paket">
                                         <i class="fas fa-edit mr-1"></i> Isi Paket
                                     </button>
-                                    <button onclick='openPackageModal(${p.id}, "${escapeHtml(p.package_name)}", "${escapeHtml(p.description || '')}")' 
+                                    <button onclick="openPackageModalFromButton(this, ${p.id})" 
+                                        data-package-name="${jsStringEscape(p.package_name)}"
+                                        data-package-desc="${jsStringEscape(p.description || '')}"
                                         class="text-blue-500 hover:text-blue-700 ml-3 transition duration-200" 
                                         title="Edit">
                                         <i class="fas fa-pencil-alt"></i>
@@ -331,6 +397,17 @@ require_once 'header.php';
             document.getElementById('package_name').value = name;
             document.getElementById('description').value = desc;
             packageModal.classList.remove('hidden');
+        }
+
+        function openPackageModalFromButton(button, id) {
+            const packageName = button.getAttribute('data-package-name');
+            const packageDesc = button.getAttribute('data-package-desc');
+            
+            // Decode the escaped strings
+            const decodedName = decodeJsString(packageName);
+            const decodedDesc = decodeJsString(packageDesc);
+            
+            openPackageModal(id, decodedName, decodedDesc);
         }
 
         function closePackageModal() {
@@ -407,6 +484,12 @@ require_once 'header.php';
             document.getElementById('questionManagerTitle').textContent = `Kelola Soal untuk Paket: ${packageName}`;
             questionManagerModal.classList.remove('hidden');
             fetchQuestionsForPackage(packageId);
+        }
+
+        function openQuestionManagerFromButton(button, packageId) {
+            const packageName = button.getAttribute('data-package-name');
+            const decodedName = decodeJsString(packageName);
+            openQuestionManager(packageId, decodedName);
         }
 
         function closeQuestionManager() {
@@ -691,41 +774,6 @@ require_once 'header.php';
                 console.error('Error:', error);
                 showNotification('Error menghapus media: ' + error.message, 'error');
             });
-        }
-
-        // --- Utility Functions ---
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function showNotification(message, type = 'info') {
-            // Remove existing notification
-            const existingNotification = document.querySelector('.fixed-notification');
-            if (existingNotification) {
-                existingNotification.remove();
-            }
-
-            const colors = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                warning: 'bg-yellow-500',
-                info: 'bg-blue-500'
-            };
-
-            const notification = document.createElement('div');
-            notification.className = `fixed-notification fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-transform duration-300`;
-            notification.textContent = message;
-
-            document.body.appendChild(notification);
-
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => notification.remove(), 300);
-            }, 5000);
         }
 
         // --- Inisialisasi Halaman ---
