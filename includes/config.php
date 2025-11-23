@@ -18,7 +18,11 @@ define('DB_HOST', 'localhost');
 define('DB_USERNAME', 'u500054717_cbt_app'); // Ganti dengan username database Anda
 
 // Password untuk mengakses database
+<<<<<<< HEAD
 define('DB_PASSWORD', 'Ymiid123'); // Ganti dengan password database Anda
+=======
+define('DB_PASSWORD', 'Y@maguchi123'); // Ganti dengan password database Anda
+>>>>>>> Publish-hosting
 
 // Nama database yang akan digunakan
 define('DB_NAME', 'u500054717_cbt_app'); // Ganti dengan nama database Anda
@@ -46,9 +50,12 @@ if (!$conn->set_charset("utf8")) {
     exit();
 }
 
-// Pengaturan zona waktu default untuk fungsi tanggal dan waktu di PHP
 date_default_timezone_set('Asia/Jakarta');
 
+<<<<<<< HEAD
+=======
+// --- PERBAIKAN: SINKRONISASI ZONA WAKTU DATABASE ---
+>>>>>>> Publish-hosting
 // Baris ini memerintahkan MySQL untuk menggunakan zona waktu WIB (UTC+7)
 // untuk sesi koneksi ini. Ini memastikan fungsi NOW() di SQL
 // akan berjalan pada zona waktu yang sama dengan PHP.
