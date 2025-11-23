@@ -1,9 +1,13 @@
 <?php
 // --- BAGIAN AJAX UNTUK PAKET SOAL ---
 <<<<<<< HEAD
+<<<<<<< HEAD
 if (isset($_GET['fetch_list']) || (isset($_POST['action']) && $_POST['action'] == 'save_package') || (isset($_POST['action']) && $_POST['action'] == 'delete_package')) {
 =======
 if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['action'], ['save_package', 'delete_package']))) {
+>>>>>>> Publish-hosting
+=======
+if (isset($_GET['fetch_list']) || (isset($_POST['action']) && $_POST['action'] == 'save_package') || (isset($_POST['action']) && $_POST['action'] == 'delete_package')) {
 >>>>>>> Publish-hosting
     require_once '../includes/config.php';
     
@@ -19,6 +23,7 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
                 GROUP BY p.id
                 ORDER BY p.package_name ASC";
 <<<<<<< HEAD
+<<<<<<< HEAD
         $packages = $conn->query($sql)->fetch_all(MYSQLI_ASSOC);
         echo json_encode(['packages' => $packages]);
 =======
@@ -30,11 +35,16 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
             echo json_encode(['packages' => [], 'error' => $conn->error]);
         }
 >>>>>>> Publish-hosting
+=======
+        $packages = $conn->query($sql)->fetch_all(MYSQLI_ASSOC);
+        echo json_encode(['packages' => $packages]);
+>>>>>>> Publish-hosting
         exit;
     }
 
     if (isset($_POST['action'])) {
         $action = $_POST['action'];
+<<<<<<< HEAD
 <<<<<<< HEAD
         if ($action == 'save_package') {
             $id = $_POST['package_id'];
@@ -42,6 +52,8 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
             $desc = $_POST['description'];
             if (empty($id)) { // Insert
 =======
+=======
+>>>>>>> Publish-hosting
         
         if ($action == 'save_package') {
             $id = isset($_POST['package_id']) ? intval($_POST['package_id']) : 0;
@@ -54,12 +66,16 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
             }
             
             if ($id == 0) { // Insert
+<<<<<<< HEAD
+>>>>>>> Publish-hosting
+=======
 >>>>>>> Publish-hosting
                 $stmt = $conn->prepare("INSERT INTO question_packages (package_name, description) VALUES (?, ?)");
                 $stmt->bind_param("ss", $name, $desc);
             } else { // Update
                 $stmt = $conn->prepare("UPDATE question_packages SET package_name = ?, description = ? WHERE id = ?");
                 $stmt->bind_param("ssi", $name, $desc, $id);
+<<<<<<< HEAD
 <<<<<<< HEAD
             }
             if ($stmt->execute()) echo json_encode(['status' => 'success']);
@@ -73,6 +89,8 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
             if ($stmt->execute()) echo json_encode(['status' => 'success']);
             else echo json_encode(['status' => 'error']);
 =======
+=======
+>>>>>>> Publish-hosting
             }
             
             if ($stmt->execute()) {
@@ -101,6 +119,9 @@ if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['a
                 echo json_encode(['status' => 'error', 'message' => $stmt->error]);
             }
             $stmt->close();
+<<<<<<< HEAD
+>>>>>>> Publish-hosting
+=======
 >>>>>>> Publish-hosting
             exit;
         }
@@ -112,6 +133,7 @@ $page_title = 'Manajemen Bank Soal';
 require_once 'header.php';
 ?>
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <!-- Tombol Tambah Paket -->
 <div class="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -213,6 +235,8 @@ require_once 'header.php';
                         </div>
                         <div id="current_audio_container" class="mt-2"></div>
 =======
+=======
+>>>>>>> Publish-hosting
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -275,6 +299,9 @@ require_once 'header.php';
                             class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
                             Simpan Paket
                         </button>
+<<<<<<< HEAD
+>>>>>>> Publish-hosting
+=======
 >>>>>>> Publish-hosting
                     </div>
                 </form>
@@ -293,6 +320,7 @@ require_once 'header.php';
                         &times;
                     </button>
                 </div>
+<<<<<<< HEAD
 <<<<<<< HEAD
                 <div>
                     <label class="block font-semibold mb-2">Pilihan Jawaban</label>
@@ -569,6 +597,8 @@ require_once 'header.php';
     document.addEventListener('DOMContentLoaded', fetchPackages);
 </script>
 =======
+=======
+>>>>>>> Publish-hosting
 
                 <!-- Body Modal -->
                 <div class="p-6 flex-grow overflow-y-auto">
@@ -894,6 +924,9 @@ require_once 'header.php';
             questionManagerModal.classList.remove('hidden');
             fetchQuestionsForPackage(packageId);
         }
+<<<<<<< HEAD
+>>>>>>> Publish-hosting
+=======
 >>>>>>> Publish-hosting
 
         function openQuestionManagerFromButton(button, packageId) {

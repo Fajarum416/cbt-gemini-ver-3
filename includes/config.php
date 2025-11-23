@@ -18,11 +18,7 @@ define('DB_HOST', 'localhost');
 define('DB_USERNAME', 'u500054717_cbt_app'); // Ganti dengan username database Anda
 
 // Password untuk mengakses database
-<<<<<<< HEAD
-define('DB_PASSWORD', 'Ymiid123'); // Ganti dengan password database Anda
-=======
 define('DB_PASSWORD', 'Y@maguchi123'); // Ganti dengan password database Anda
->>>>>>> Publish-hosting
 
 // Nama database yang akan digunakan
 define('DB_NAME', 'u500054717_cbt_app'); // Ganti dengan nama database Anda
@@ -53,6 +49,10 @@ if (!$conn->set_charset("utf8")) {
 date_default_timezone_set('Asia/Jakarta');
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+// --- PERBAIKAN: SINKRONISASI ZONA WAKTU DATABASE ---
+>>>>>>> Publish-hosting
 =======
 // --- PERBAIKAN: SINKRONISASI ZONA WAKTU DATABASE ---
 >>>>>>> Publish-hosting
