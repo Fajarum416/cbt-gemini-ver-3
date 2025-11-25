@@ -1,94 +1,108 @@
 <?php
+// student/confirm_page.php (REVISI UI)
 $page_title = 'Konfirmasi Ujian';
 require_once 'header.php';
 
-if (!isset($_GET['test_id']) || !is_numeric($_GET['test_id'])) {
-    header("Location: index.php");
-    exit;
-}
-$test_id = $_GET['test_id'];
+// LOGIKA TETAP SAMA
+$test_id = filter_input(INPUT_GET, 'test_id', FILTER_VALIDATE_INT);
+if (!$test_id) redirect('index.php');
+
 $student_id = $_SESSION['user_id'];
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    // PERBAIKAN DI SINI:
-    // Logika untuk menghapus hasil lama (DELETE FROM test_results) telah dihapus.
-    // Sekarang, sistem akan selalu membuat catatan baru untuk setiap pengerjaan.
+    validateCSRF();
+    try {
+        $existing = db()->single("SELECT id FROM test_results WHERE student_id = ? AND test_id = ? AND status = 'in_progress'", [$student_id, $test_id]);
+        
+        if (!$existing) {
+            $test_available = db()->single("SELECT id FROM tests WHERE id = ? AND availability_start <= NOW() AND availability_end >= NOW()", [$test_id]);
+            if (!$test_available) throw new Exception("Ujian tidak tersedia atau sudah berakhir.");
 
-    // Buat record baru di test_results untuk sesi pengerjaan yang baru
-    $start_time = date('Y-m-d H:i:s');
-    $insert_sql = "INSERT INTO test_results (student_id, test_id, start_time, status) VALUES (?, ?, ?, 'in_progress')";
-    $insert_stmt = $conn->prepare($insert_sql);
-    $insert_stmt->bind_param("iis", $student_id, $test_id, $start_time);
-    $insert_stmt->execute();
-    
-    header("Location: test_page.php?test_id=" . $test_id);
-    exit;
+            $start_time = date('Y-m-d H:i:s');
+            db()->query("INSERT INTO test_results (student_id, test_id, start_time, status) VALUES (?, ?, ?, 'in_progress')", [$student_id, $test_id, $start_time]);
+        }
+        redirect("test_page.php?test_id=" . $test_id);
+    } catch (Exception $e) { $error_message = $e->getMessage(); }
 }
 
-// Ambil detail ujian
-$sql = "SELECT t.title, t.description, t.duration, COUNT(tq.id) as total_questions, COALESCE(SUM(tq.points), 0) as total_points
-        FROM tests t LEFT JOIN test_questions tq ON t.id = tq.test_id
-        WHERE t.id = ? GROUP BY t.id";
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $test_id);
-$stmt->execute();
-$result = $stmt->get_result();
-if ($result->num_rows == 0) { header("Location: index.php"); exit; }
-$test = $result->fetch_assoc();
+try {
+    $sql = "SELECT t.title, t.description, t.duration, COUNT(tq.id) as total_questions, COALESCE(SUM(tq.points), 0) as total_points, t.instructions FROM tests t LEFT JOIN test_questions tq ON t.id = tq.test_id WHERE t.id = ? GROUP BY t.id";
+    $test = db()->single($sql, [$test_id]);
+    if (!$test) throw new Exception("Data ujian tidak ditemukan.");
+} catch (Exception $e) { redirect('index.php'); }
 ?>
 
-<!-- Tombol Kembali -->
-<div class="mb-4">
-    <a href="index.php" class="text-blue-600 hover:underline flex items-center">
-        <i class="fas fa-arrow-left mr-2"></i>
-        Kembali ke Dasbor
+<div class="max-w-3xl mx-auto mt-6 md:mt-10 fade-enter">
+    
+    <a href="index.php" class="inline-flex items-center text-slate-500 hover:text-indigo-600 mb-6 font-medium text-sm transition-colors">
+        <i class="fas fa-arrow-left mr-2"></i> Kembali ke Dashboard
     </a>
-</div>
 
-<div class="bg-white p-8 rounded-xl shadow-lg max-w-2xl mx-auto">
-    <div class="text-center">
-        <i class="fas fa-file-alt text-5xl text-blue-500 mb-4"></i>
-        <h1 class="text-3xl font-bold text-gray-800">Konfirmasi Memulai Ujian</h1>
-        <p class="text-gray-600 mt-2">Anda akan memulai ujian berikut:</p>
-    </div>
+    <?php if (isset($error_message)): ?>
+        <div class="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center">
+            <i class="fas fa-exclamation-circle mr-3 text-lg"></i>
+            <span><?php echo htmlspecialchars($error_message); ?></span>
+        </div>
+    <?php endif; ?>
 
-    <div class="mt-8 border-t border-b border-gray-200 py-6">
-        <h2 class="text-2xl font-semibold text-center mb-4"><?php echo htmlspecialchars($test['title']); ?></h2>
-        <div class="flex justify-around text-center">
-            <div>
-                <p class="text-sm text-gray-500">Jumlah Soal</p>
-                <p class="text-2xl font-bold text-gray-800"><?php echo $test['total_questions']; ?></p>
+    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        
+        <div class="bg-slate-50 p-8 text-center border-b border-slate-100">
+            <div class="w-16 h-16 bg-white text-indigo-600 border border-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+                <i class="fas fa-file-signature text-3xl"></i>
             </div>
-            <div>
-                <p class="text-sm text-gray-500">Durasi</p>
-                <p class="text-2xl font-bold text-gray-800"><?php echo $test['duration']; ?> Menit</p>
+            <h1 class="text-2xl md:text-3xl font-bold text-slate-900 mb-2"><?php echo htmlspecialchars($test['title']); ?></h1>
+            <p class="text-slate-500 max-w-xl mx-auto leading-relaxed"><?php echo htmlspecialchars($test['description']); ?></p>
+        </div>
+
+        <div class="grid grid-cols-3 divide-x divide-slate-100 border-b border-slate-100">
+            <div class="p-6 text-center group hover:bg-slate-50 transition">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Soal</div>
+                <div class="text-xl font-bold text-slate-800"><?php echo $test['total_questions']; ?></div>
             </div>
-            <div>
-                <p class="text-sm text-gray-500">Total Poin</p>
-                <p class="text-2xl font-bold text-gray-800"><?php echo number_format($test['total_points'], 2); ?></p>
+            <div class="p-6 text-center group hover:bg-slate-50 transition">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Durasi</div>
+                <div class="text-xl font-bold text-slate-800"><?php echo $test['duration']; ?><span class="text-sm font-normal text-slate-500 ml-1">m</span></div>
+            </div>
+            <div class="p-6 text-center group hover:bg-slate-50 transition">
+                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Poin</div>
+                <div class="text-xl font-bold text-slate-800"><?php echo floatval($test['total_points']); ?></div>
             </div>
         </div>
-    </div>
 
-    <div class="mt-8 text-center">
-        <h3 class="font-semibold text-gray-800">Peraturan Ujian:</h3>
-        <ul class="list-disc list-inside text-left max-w-md mx-auto mt-2 text-gray-600 text-sm">
-            <li>Waktu akan mulai berjalan setelah Anda menekan tombol "Mulai Ujian Sekarang".</li>
-            <li>Pastikan koneksi internet Anda stabil selama pengerjaan.</li>
-            <li>Jangan menutup browser atau me-refresh halaman selama ujian berlangsung.</li>
-        </ul>
-    </div>
+        <div class="p-8">
+            <?php if (!empty($test['instructions'])): ?>
+                <div class="mb-6">
+                    <h4 class="font-bold text-slate-800 mb-2 flex items-center text-sm uppercase tracking-wide">
+                        <i class="fas fa-info-circle text-indigo-500 mr-2"></i> Petunjuk Khusus
+                    </h4>
+                    <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-indigo-900 text-sm leading-relaxed">
+                        <?php echo nl2br(htmlspecialchars($test['instructions'])); ?>
+                    </div>
+                </div>
+            <?php endif; ?>
 
-    <div class="mt-8">
-        <form action="confirm_page.php?test_id=<?php echo $test_id; ?>" method="post">
-            <button type="submit"
-                class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg">
-                Mulai Ujian Sekarang
-            </button>
-        </form>
+            <div class="mb-8">
+                <h4 class="font-bold text-slate-800 mb-2 flex items-center text-sm uppercase tracking-wide">
+                    <i class="fas fa-exclamation-triangle text-amber-500 mr-2"></i> Peraturan
+                </h4>
+                <ul class="list-disc list-inside bg-amber-50 border border-amber-100 rounded-xl p-4 text-amber-900 text-sm space-y-1">
+                    <li>Waktu akan berjalan mundur segera setelah tombol mulai ditekan.</li>
+                    <li>Dilarang menyegarkan (refresh) browser selama ujian.</li>
+                    <li>Sistem akan menyimpan jawaban secara otomatis.</li>
+                    <li>Pastikan koneksi internet stabil.</li>
+                </ul>
+            </div>
+
+            <form action="confirm_page.php?test_id=<?php echo $test_id; ?>" method="post">
+                <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg shadow-indigo-200 transform hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center text-lg">
+                    <span>Mulai Mengerjakan Sekarang</span>
+                    <i class="fas fa-arrow-right ml-3"></i>
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 
-<?php
-require_once 'footer.php';
-?>
+<?php require_once 'footer.php'; ?>

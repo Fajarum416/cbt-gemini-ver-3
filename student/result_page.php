@@ -1,189 +1,202 @@
 <?php
-// --- Logika Awal untuk Menentukan Peran & Memuat Header yang Tepat ---
+// student/result_page.php (REVISI UI)
+require_once '../includes/functions.php';
+
+// LOGIKA TETAP SAMA
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
+    header('X-Frame-Options: DENY');
+    header('X-Content-Type-Options: nosniff');
 }
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-    header('Location: ../login.php');
-    exit;
-}
+
+if (!isset($_SESSION['role'])) redirect('../login.php');
 
 if ($_SESSION['role'] === 'admin') {
     require_once '../admin/header.php';
-} elseif ($_SESSION['role'] === 'student') {
-    require_once 'header.php';
+    $back_link = '../admin/reports.php';
+    $back_text = 'Kembali ke Laporan';
 } else {
-    header('Location: ../logout.php');
-    exit;
+    require_once 'header.php'; // Ini akan memuat header style baru kita
+    $back_link = 'history.php';
+    $back_text = 'Kembali ke Riwayat';
 }
-// --- Akhir Logika Awal ---
 
-if (!isset($_GET['result_id']) || !is_numeric($_GET['result_id'])) {
-    header("Location: index.php");
-    exit;
-}
-$result_id = $_GET['result_id'];
-$user_id = $_SESSION['user_id'];
-$user_role = $_SESSION['role'];
+$result_id = filter_input(INPUT_GET, 'result_id', FILTER_VALIDATE_INT);
+if (!$result_id) redirect('index.php');
 
-$sql_result = "SELECT tr.score, t.title AS test_title, t.passing_grade, u.username AS student_name FROM test_results tr JOIN tests t ON tr.test_id = t.id JOIN users u ON tr.student_id = u.id WHERE tr.id = ?";
-if ($user_role === 'student') {
-    $sql_result .= " AND tr.student_id = ?";
-    $stmt_result = $conn->prepare($sql_result);
-    $stmt_result->bind_param("ii", $result_id, $user_id);
-} else {
-    $stmt_result = $conn->prepare($sql_result);
-    $stmt_result->bind_param("i", $result_id);
-}
-$stmt_result->execute();
-$result_main = $stmt_result->get_result();
-if ($result_main->num_rows == 0) {
-    echo "<div class='p-4 text-red-700 bg-red-100 rounded-lg'>Anda tidak memiliki izin untuk melihat hasil ini.</div>";
-    require_once($_SESSION['role'] === 'admin' ? '../admin/footer.php' : 'footer.php');
-    exit;
-}
-$test_result = $result_main->fetch_assoc();
-$is_passed = $test_result['score'] >= $test_result['passing_grade'];
+$viewer_id = $_SESSION['user_id'];
+$role = $_SESSION['role'];
 
-// PERBAIKAN: Tambahkan image_path dan audio_path ke dalam query SELECT
-$sql_review = "
-    SELECT 
-        q.question_text, 
-        q.options, 
-        q.correct_answer, 
-        q.image_path, 
-        q.audio_path,
-        sa.student_answer, 
-        sa.is_correct 
-    FROM student_answers sa 
-    JOIN questions q ON sa.question_id = q.id 
-    WHERE sa.test_result_id = ? 
-    ORDER BY (
-        SELECT tq.question_order 
-        FROM test_questions tq 
-        JOIN test_results tr ON tq.test_id = tr.test_id 
-        WHERE tr.id = sa.test_result_id AND tq.question_id = sa.question_id
-    )";
+try {
+    $res = db()->single("SELECT tr.score, t.title, t.passing_grade, u.username, tr.student_id, tr.end_time, tr.test_id FROM test_results tr JOIN tests t ON tr.test_id = t.id JOIN users u ON tr.student_id = u.id WHERE tr.id = ?", [$result_id]);
+    if (!$res) throw new Exception("Data tidak ditemukan.");
+    if ($role === 'student' && $res['student_id'] != $viewer_id) throw new Exception("Akses ditolak.");
+    $passed = $res['score'] >= $res['passing_grade'];
+    
+    $review = db()->all("SELECT q.question_text, q.options, q.correct_answer, q.image_path, q.audio_path, sa.student_answer, sa.is_correct, q.explanation FROM student_answers sa JOIN questions q ON sa.question_id = q.id WHERE sa.test_result_id = ? ORDER BY (SELECT tq.question_order FROM test_questions tq WHERE tq.test_id = ? AND tq.question_id = sa.question_id)", [$result_id, $res['test_id']]);
 
-$stmt_review = $conn->prepare($sql_review);
-$stmt_review->bind_param("i", $result_id);
-$stmt_review->execute();
-$review_questions = $stmt_review->get_result();
+    $correct_count = 0;
+    foreach($review as $r) if($r['is_correct']) $correct_count++;
+    $incorrect_count = count($review) - $correct_count;
+    $completion_percentage = count($review) > 0 ? round(($correct_count / count($review)) * 100) : 0;
 
-$total_questions = $review_questions->num_rows;
-$correct_count = 0;
-// Loop sementara untuk menghitung jawaban benar
-$temp_questions = [];
-while ($q = $review_questions->fetch_assoc()) {
-    if ($q['is_correct']) $correct_count++;
-    $temp_questions[] = $q; // Simpan data ke array sementara
-}
-$incorrect_count = $total_questions - $correct_count;
+} catch (Exception $e) { /* Error handling standard */ }
 ?>
 
-<!-- Tombol Kembali -->
-<div class="mb-6">
-    <?php if ($user_role === 'admin'): ?>
-    <a href="../admin/reports.php" class="text-blue-600 hover:underline">&larr; Kembali ke Laporan</a>
-    <?php else: ?>
-    <a href="index.php" class="text-blue-600 hover:underline">&larr; Kembali ke Dasbor</a>
-    <?php endif; ?>
+<div class="mb-6 fade-enter">
+    <a href="<?php echo $back_link; ?>" class="inline-flex items-center text-slate-500 hover:text-indigo-600 font-medium transition-colors">
+        <i class="fas fa-arrow-left mr-2"></i> <?php echo $back_text; ?>
+    </a>
 </div>
 
-<!-- Kartu Hasil Ujian Utama -->
-<div class="bg-white p-8 rounded-xl shadow-lg max-w-2xl mx-auto text-center">
-    <h1 class="text-2xl font-bold text-gray-800">Hasil Ujian Selesai</h1>
-    <p class="text-gray-600 mt-1">Ujian: <span
-            class="font-semibold"><?php echo htmlspecialchars($test_result['test_title']); ?></span></p>
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8 fade-enter">
+    
+    <div class="lg:col-span-1">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center h-full flex flex-col justify-center">
+            <h5 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Nilai Akhir</h5>
+            
+            <div class="mb-4">
+                <span class="text-6xl font-extrabold <?php echo $passed ? 'text-emerald-600' : 'text-rose-600'; ?>">
+                    <?php echo number_format($res['score'], 2); ?>
+                </span>
+            </div>
 
-    <div class="my-8">
-        <p class="text-lg text-gray-700">Skor Akhir:</p>
-        <p class="text-7xl font-bold <?php echo $is_passed ? 'text-green-600' : 'text-red-600'; ?>">
-            <?php echo htmlspecialchars(number_format($test_result['score'], 2)); ?>
-        </p>
-        <p class="text-2xl font-bold mt-2 <?php echo $is_passed ? 'text-green-600' : 'text-red-600'; ?>">
-            <?php echo $is_passed ? 'LULUS' : 'GAGAL'; ?>
-        </p>
-        <p class="text-sm text-gray-500">(Batas Lulus: <?php echo number_format($test_result['passing_grade'], 2); ?>)
-        </p>
-    </div>
+            <div class="mb-6">
+                <span class="inline-flex items-center px-4 py-1.5 rounded-full text-sm font-bold <?php echo $passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'; ?>">
+                    <?php echo $passed ? '<i class="fas fa-check-circle mr-2"></i> LULUS' : '<i class="fas fa-times-circle mr-2"></i> TIDAK LULUS'; ?>
+                </span>
+            </div>
 
-    <div class="flex justify-around border-t pt-4">
-        <div>
-            <p class="text-sm text-gray-500">Total Soal</p>
-            <p class="text-2xl font-bold text-gray-800"><?php echo $total_questions; ?></p>
-        </div>
-        <div>
-            <p class="text-sm text-gray-500">Jawaban Benar</p>
-            <p class="text-2xl font-bold text-green-600"><?php echo $correct_count; ?></p>
-        </div>
-        <div>
-            <p class="text-sm text-gray-500">Jawaban Salah</p>
-            <p class="text-2xl font-bold text-red-600"><?php echo $incorrect_count; ?></p>
-        </div>
-    </div>
-</div>
-
-<!-- Bagian Review Jawaban (Dropdown) -->
-<div class="mt-10 max-w-4xl mx-auto">
-    <div class="bg-white rounded-lg shadow-md">
-        <button onclick="toggleReview()"
-            class="w-full text-left p-4 flex justify-between items-center font-bold text-gray-800">
-            <span>Lihat Detail Review Jawaban</span>
-            <i id="review-icon" class="fas fa-chevron-down transition-transform"></i>
-        </button>
-        <div id="review-container" class="p-6 border-t hidden space-y-6">
-            <?php foreach ($temp_questions as $index => $q):
-                $options = json_decode($q['options'], true);
-            ?>
-            <div class="bg-gray-50 p-4 rounded-lg">
-                <p class="font-bold text-gray-800 mb-2">Soal #<?php echo $index + 1; ?></p>
-
-                <!-- PERBAIKAN: Tampilkan media (gambar/audio) jika ada -->
-                <?php if (!empty($q['image_path'])): ?>
-                <img src="../<?php echo htmlspecialchars($q['image_path']); ?>" alt="Gambar Soal"
-                    class="mb-4 rounded-lg max-w-md h-auto">
-                <?php endif; ?>
-                <?php if (!empty($q['audio_path'])): ?>
-                <audio controls class="w-full mb-4">
-                    <source src="../<?php echo htmlspecialchars($q['audio_path']); ?>">
-                    Browser Anda tidak mendukung elemen audio.
-                </audio>
-                <?php endif; ?>
-
-                <div class="text-gray-700 mb-4"><?php echo nl2br(htmlspecialchars($q['question_text'])); ?></div>
-                <div class="space-y-3">
-                    <?php foreach ($options as $key => $value):
-                            $is_correct_option = ($key == $q['correct_answer']);
-                            $is_student_choice = ($key == $q['student_answer']);
-                            $bg_class = 'bg-gray-100';
-                            if ($is_correct_option) $bg_class = 'bg-green-100 border-green-500';
-                            if ($is_student_choice && !$q['is_correct']) $bg_class = 'bg-red-100 border-red-500';
-                        ?>
-                    <div class="p-3 border rounded-md <?php echo $bg_class; ?> flex items-center">
-                        <span class="font-semibold mr-3"><?php echo $key; ?>.</span>
-                        <span class="flex-1"><?php echo htmlspecialchars($value); ?></span>
-                        <?php if ($is_student_choice): ?>
-                        <span class="ml-4 text-sm font-semibold text-blue-700">(Jawaban Anda)</span>
-                        <?php endif; ?>
-                    </div>
-                    <?php endforeach; ?>
+            <div class="grid grid-cols-2 gap-4 border-t border-slate-100 pt-6 mt-2">
+                <div>
+                    <div class="text-2xl font-bold text-emerald-600"><?php echo $correct_count; ?></div>
+                    <div class="text-xs text-slate-500 font-medium uppercase">Benar</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-rose-600"><?php echo $incorrect_count; ?></div>
+                    <div class="text-xs text-slate-500 font-medium uppercase">Salah</div>
                 </div>
             </div>
-            <?php endforeach; ?>
+            <p class="text-xs text-slate-400 mt-4">KKM: <?php echo number_format($res['passing_grade'], 2); ?></p>
         </div>
+    </div>
+
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 h-full">
+            <h1 class="text-2xl font-bold text-slate-900 mb-2"><?php echo htmlspecialchars($res['title']); ?></h1>
+            <div class="flex items-center gap-4 text-sm text-slate-500 mb-6 pb-6 border-b border-slate-100">
+                <span><i class="fas fa-user mr-2"></i> <?php echo htmlspecialchars($res['username']); ?></span>
+                <span>&bull;</span>
+                <span><i class="fas fa-calendar mr-2"></i> <?php echo date('d M Y H:i', strtotime($res['end_time'])); ?></span>
+            </div>
+
+            <h3 class="font-bold text-slate-800 mb-4">Statistik Performa</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-slate-600 font-medium">Akurasi Jawaban</span>
+                        <span class="font-bold text-indigo-600"><?php echo $completion_percentage; ?>%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 rounded-full h-2.5">
+                        <div class="bg-indigo-600 h-2.5 rounded-full" style="width: <?php echo $completion_percentage; ?>%"></div>
+                    </div>
+                </div>
+                
+                <div class="bg-slate-50 rounded-xl p-4 border border-slate-100 mt-4">
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        <?php if ($passed): ?>
+                            <i class="fas fa-star text-amber-400 mr-2"></i> Selamat! Anda telah melampaui standar kelulusan. Pertahankan prestasi ini.
+                        <?php else: ?>
+                            <i class="fas fa-book-reader text-indigo-500 mr-2"></i> Sayang sekali, nilai Anda masih di bawah standar. Silakan pelajari pembahasan soal di bawah ini.
+                        <?php endif; ?>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden fade-enter">
+    <div class="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center cursor-pointer" onclick="toggleReview()">
+        <h3 class="font-bold text-slate-800 flex items-center">
+            <i class="fas fa-list-ul mr-3 text-indigo-500"></i> Pembahasan Detail
+        </h3>
+        <button class="text-slate-400 hover:text-indigo-600 transition">
+            <i class="fas fa-chevron-down" id="toggleIcon"></i>
+        </button>
+    </div>
+    
+    <div id="reviewContainer" class="divide-y divide-slate-100">
+        <?php foreach ($review as $idx => $q): 
+            $opts = json_decode($q['options'], true) ?? [];
+        ?>
+            <div class="p-6 hover:bg-slate-50 transition-colors duration-200">
+                <div class="flex gap-4">
+                    <span class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm text-white <?php echo $q['is_correct'] ? 'bg-emerald-500' : 'bg-rose-500'; ?>">
+                        <?php echo $idx + 1; ?>
+                    </span>
+                    <div class="flex-grow">
+                        <?php if ($q['image_path']): ?>
+                            <div class="mb-4">
+                                <img src="../<?php echo htmlspecialchars($q['image_path']); ?>" class="max-h-40 rounded-lg border border-slate-200">
+                            </div>
+                        <?php endif; ?>
+
+                        <div class="text-slate-800 font-medium mb-4">
+                            <?php echo nl2br(htmlspecialchars($q['question_text'])); ?>
+                        </div>
+
+                        <div class="space-y-2 mb-4">
+                            <?php foreach ($opts as $k => $v): 
+                                $is_key = ($k === $q['correct_answer']);
+                                $is_ans = ($k === $q['student_answer']);
+                                
+                                $style = 'border-slate-200 text-slate-600 bg-white';
+                                $icon = '';
+                                
+                                if ($is_key) {
+                                    $style = 'border-emerald-200 bg-emerald-50 text-emerald-800 font-bold';
+                                    $icon = '<i class="fas fa-check text-emerald-600"></i>';
+                                } elseif ($is_ans && !$is_key) {
+                                    $style = 'border-rose-200 bg-rose-50 text-rose-800';
+                                    $icon = '<i class="fas fa-times text-rose-600"></i>';
+                                }
+                            ?>
+                                <div class="flex items-center justify-between p-3 border rounded-lg text-sm <?php echo $style; ?>">
+                                    <div class="flex gap-3">
+                                        <span class="font-bold min-w-[20px]"><?php echo $k; ?>.</span>
+                                        <span><?php echo htmlspecialchars($v); ?></span>
+                                    </div>
+                                    <div class="ml-2"><?php echo $icon; ?></div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <?php if (!empty($q['explanation'])): ?>
+                            <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-sm">
+                                <span class="font-bold text-indigo-800 block mb-1">Pembahasan:</span>
+                                <p class="text-indigo-900"><?php echo nl2br(htmlspecialchars($q['explanation'])); ?></p>
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
     </div>
 </div>
 
 <script>
 function toggleReview() {
-    const container = document.getElementById('review-container');
-    const icon = document.getElementById('review-icon');
-    container.classList.toggle('hidden');
-    icon.classList.toggle('rotate-180');
+    const box = document.getElementById('reviewContainer');
+    const icon = document.getElementById('toggleIcon');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        icon.classList.remove('fa-chevron-up'); icon.classList.add('fa-chevron-down');
+    } else {
+        box.style.display = 'none';
+        icon.classList.remove('fa-chevron-down'); icon.classList.add('fa-chevron-up');
+    }
 }
 </script>
 
-<?php
-require_once($_SESSION['role'] === 'admin' ? '../admin/footer.php' : 'footer.php');
-?>
+<?php require_once ($role === 'admin' ? '../admin/footer.php' : 'footer.php'); ?>

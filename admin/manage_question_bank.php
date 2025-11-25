@@ -1,798 +1,109 @@
 <?php
-// --- BAGIAN AJAX UNTUK PAKET SOAL ---
-if (isset($_GET['fetch_list']) || (isset($_POST['action']) && in_array($_POST['action'], ['save_package', 'delete_package']))) {
-    require_once '../includes/config.php';
-    
-    // Clear any previous output
-    if (ob_get_length()) ob_clean();
-    
-    header('Content-Type: application/json');
-
-    if (isset($_GET['fetch_list'])) {
-        $sql = "SELECT p.id, p.package_name, p.description, COUNT(q.id) as question_count 
-                FROM question_packages p
-                LEFT JOIN questions q ON p.id = q.package_id
-                GROUP BY p.id
-                ORDER BY p.package_name ASC";
-        $result = $conn->query($sql);
-        if ($result) {
-            $packages = $result->fetch_all(MYSQLI_ASSOC);
-            echo json_encode(['packages' => $packages]);
-        } else {
-            echo json_encode(['packages' => [], 'error' => $conn->error]);
-        }
-        exit;
-    }
-
-    if (isset($_POST['action'])) {
-        $action = $_POST['action'];
-        
-        if ($action == 'save_package') {
-            $id = isset($_POST['package_id']) ? intval($_POST['package_id']) : 0;
-            $name = isset($_POST['package_name']) ? $conn->real_escape_string($_POST['package_name']) : '';
-            $desc = isset($_POST['description']) ? $conn->real_escape_string($_POST['description']) : '';
-            
-            if (empty($name)) {
-                echo json_encode(['status' => 'error', 'message' => 'Nama paket tidak boleh kosong']);
-                exit;
-            }
-            
-            if ($id == 0) { // Insert
-                $stmt = $conn->prepare("INSERT INTO question_packages (package_name, description) VALUES (?, ?)");
-                $stmt->bind_param("ss", $name, $desc);
-            } else { // Update
-                $stmt = $conn->prepare("UPDATE question_packages SET package_name = ?, description = ? WHERE id = ?");
-                $stmt->bind_param("ssi", $name, $desc, $id);
-            }
-            
-            if ($stmt->execute()) {
-                echo json_encode(['status' => 'success']);
-            } else {
-                echo json_encode(['status' => 'error', 'message' => $stmt->error]);
-            }
-            $stmt->close();
-            exit;
-        }
-        
-        if ($action == 'delete_package') {
-            $id = isset($_POST['package_id']) ? intval($_POST['package_id']) : 0;
-            
-            if ($id == 0) {
-                echo json_encode(['status' => 'error', 'message' => 'ID paket tidak valid']);
-                exit;
-            }
-            
-            $stmt = $conn->prepare("DELETE FROM question_packages WHERE id = ?");
-            $stmt->bind_param("i", $id);
-            
-            if ($stmt->execute()) {
-                echo json_encode(['status' => 'success']);
-            } else {
-                echo json_encode(['status' => 'error', 'message' => $stmt->error]);
-            }
-            $stmt->close();
-            exit;
-        }
-    }
-}
-// --- AKHIR BAGIAN AJAX ---
-
-$page_title = 'Manajemen Bank Soal';
+// admin/manage_question_bank.php (FINAL WITH TINYMCE)
+$page_title = 'Bank Soal';
 require_once 'header.php';
 ?>
 
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($page_title); ?></title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Font Awesome -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        .hidden { display: none; }
-        .fixed { position: fixed; }
-        .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-        .z-40 { z-index: 40; }
-        .z-50 { z-index: 50; }
-        .z-60 { z-index: 60; }
-    </style>
-</head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Tombol Tambah Paket -->
-        <div class="bg-white p-4 rounded-lg shadow-md mb-6">
-            <button onclick="openPackageModal()"
-                class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-                <i class="fas fa-plus mr-2"></i>Buat Paket Soal Baru
+<div class="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+    <div>
+        <h1 class="text-xl md:text-2xl font-bold text-gray-800">Bank Soal</h1>
+        <p class="text-sm text-gray-600">Kelola paket soal dan butir pertanyaan.</p>
+    </div>
+    <button onclick="openPackageModal()" class="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg shadow transition-colors flex justify-center items-center text-sm">
+        <i class="fas fa-plus mr-2"></i>Paket Baru
+    </button>
+</div>
+
+<div id="packages-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"></div>
+
+<div id="packageModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 hidden backdrop-blur-sm px-4">
+    <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md transform transition-all scale-100">
+        <h2 id="packageModalTitle" class="text-xl font-bold mb-4 text-gray-800"></h2>
+        <form id="packageForm" class="space-y-4">
+            <input type="hidden" name="package_id" id="packageId">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Nama Paket</label>
+                <input type="text" name="package_name" id="package_name" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" required>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Deskripsi</label>
+                <textarea name="description" id="description" rows="3" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+            </div>
+            <div class="flex justify-end gap-3 mt-4">
+                <button type="button" onclick="closePackageModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors">Batal</button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium shadow transition-colors">Simpan</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="questionManagerModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden backdrop-blur-sm px-0 sm:px-4">
+    <div class="bg-white w-full h-full sm:h-[85vh] sm:rounded-xl shadow-2xl sm:max-w-5xl flex flex-col overflow-hidden transition-all">
+        <div class="p-4 border-b bg-indigo-50 flex justify-between items-center shrink-0">
+            <h2 id="questionManagerTitle" class="text-lg font-bold text-indigo-900 truncate max-w-[70%]"></h2>
+            <button onclick="closeQuestionManager()" class="text-gray-500 hover:text-red-500 text-2xl px-2"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="p-4 sm:p-6 flex-grow overflow-y-auto bg-gray-50 custom-scrollbar">
+            <button onclick="openQuestionFormModal('add')" class="mb-4 w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow flex justify-center items-center text-sm transition-colors">
+                <i class="fas fa-plus mr-2"></i>Tambah Soal
             </button>
-        </div>
-
-        <!-- Daftar Paket Soal -->
-        <div class="bg-white shadow-md rounded-lg overflow-hidden">
-            <div id="packages-container" class="overflow-x-auto">
-                <div class="text-center p-6">Memuat data paket soal...</div>
-            </div>
-        </div>
-
-        <!-- Modal Tambah/Edit Paket -->
-        <div id="packageModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 hidden">
-            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
-                <h2 id="packageModalTitle" class="text-2xl font-bold mb-6 text-gray-800"></h2>
-                <form id="packageForm">
-                    <input type="hidden" name="package_id" id="packageId">
-                    <div class="mb-4">
-                        <label for="package_name" class="block font-semibold text-gray-700 mb-2">Nama Paket</label>
-                        <input type="text" id="package_name" name="package_name" 
-                            class="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            required>
-                    </div>
-                    <div class="mb-6">
-                        <label for="description" class="block font-semibold text-gray-700 mb-2">Deskripsi (Opsional)</label>
-                        <textarea id="description" name="description" rows="3"
-                            class="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
-                    </div>
-                    <div class="flex justify-end gap-4">
-                        <button type="button" onclick="closePackageModal()"
-                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition duration-200">
-                            Batal
-                        </button>
-                        <button type="submit"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
-                            Simpan Paket
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Modal Manajer Soal -->
-        <div id="questionManagerModal"
-            class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 hidden">
-            <div class="bg-gray-50 rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col mx-4">
-                <!-- Header Modal -->
-                <div class="p-4 border-b flex justify-between items-center bg-white rounded-t-lg">
-                    <h2 id="questionManagerTitle" class="text-xl font-bold text-gray-800"></h2>
-                    <button onclick="closeQuestionManager()" 
-                        class="text-2xl text-gray-500 hover:text-red-600 transition duration-200">
-                        &times;
-                    </button>
-                </div>
-
-                <!-- Body Modal -->
-                <div class="p-6 flex-grow overflow-y-auto">
-                    <div class="mb-4">
-                        <button onclick="openQuestionFormModal('add')"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-                            <i class="fas fa-plus mr-2"></i>Tambah Soal Baru
-                        </button>
-                    </div>
-                    <!-- Container untuk daftar soal -->
-                    <div id="questionsListContainer" class="space-y-3">
-                        <div class="text-center p-4 text-gray-500">Memuat soal...</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal Form Soal -->
-        <div id="questionFormModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 hidden">
-            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto mx-4">
-                <h2 id="questionFormTitle" class="text-2xl font-bold mb-6 text-gray-800"></h2>
-                <form id="questionForm" enctype="multipart/form-data">
-                    <input type="hidden" name="action" id="formAction">
-                    <input type="hidden" name="question_id" id="questionId">
-                    <input type="hidden" name="package_id" id="formPackageId">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <div class="mb-4">
-                                <label for="question_text" class="block font-semibold text-gray-700 mb-2">Teks Pertanyaan</label>
-                                <textarea id="question_text" name="question_text" rows="5"
-                                    class="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    required></textarea>
-                            </div>
-                            <div class="mb-4">
-                                <label class="block font-semibold text-gray-700 mb-2">Sisipkan Gambar (Opsional)</label>
-                                <div id="image_upload_container">
-                                    <input type="file" id="image_file" name="image_file" accept="image/*"
-                                        class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                                </div>
-                                <div id="current_image_container" class="mt-2"></div>
-                            </div>
-                            <div class="mb-4">
-                                <label class="block font-semibold text-gray-700 mb-2">Sisipkan Audio (Opsional)</label>
-                                <div id="audio_upload_container">
-                                    <input type="file" id="audio_file" name="audio_file" accept="audio/*"
-                                        class="w-full mt-1 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-                                </div>
-                                <div id="current_audio_container" class="mt-2"></div>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-gray-700 mb-2">Pilihan Jawaban</label>
-                            <div id="options-container" class="space-y-3"></div>
-                            <button type="button" onclick="addOptionField()"
-                                class="mt-3 text-sm text-blue-600 hover:text-blue-800 hover:underline transition duration-200">
-                                + Tambah Pilihan Jawaban
-                            </button>
-                        </div>
-                    </div>
-                    <div id="form-notification" class="mt-4"></div>
-                    <div class="flex justify-end gap-4 mt-6 border-t pt-6">
-                        <button type="button" onclick="closeQuestionFormModal()"
-                            class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition duration-200">
-                            Batal
-                        </button>
-                        <button type="submit" id="submitBtn"
-                            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
-                            Simpan Soal
-                        </button>
-                    </div>
-                </form>
-            </div>
+            <div id="questionsListContainer" class="space-y-3"></div>
         </div>
     </div>
+</div>
 
-    <script>
-        // =======================================================================
-        // JAVASCRIPT UNTUK MANAJEMEN BANK SOAL
-        // =======================================================================
-
-        // --- Variabel Global ---
-        const packageModal = document.getElementById('packageModal');
-        const questionManagerModal = document.getElementById('questionManagerModal');
-        const questionFormModal = document.getElementById('questionFormModal');
-        let currentPackageId = 0;
-
-        // --- Utility Functions ---
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        function jsStringEscape(str) {
-            if (str === null || str === undefined) {
-                return '';
-            }
-            return String(str)
-                .replace(/\\/g, '\\\\')
-                .replace(/'/g, "\\'")
-                .replace(/"/g, '\\"')
-                .replace(/\n/g, '\\n')
-                .replace(/\r/g, '\\r')
-                .replace(/\t/g, '\\t')
-                .replace(/\f/g, '\\f');
-        }
-
-        function decodeJsString(str) {
-            if (str === null || str === undefined) {
-                return '';
-            }
-            return String(str)
-                .replace(/\\\\/g, '\\')
-                .replace(/\\'/g, "'")
-                .replace(/\\"/g, '"')
-                .replace(/\\n/g, '\n')
-                .replace(/\\r/g, '\r')
-                .replace(/\\t/g, '\t')
-                .replace(/\\f/g, '\f');
-        }
-
-        function showNotification(message, type = 'info') {
-            // Remove existing notification
-            const existingNotification = document.querySelector('.fixed-notification');
-            if (existingNotification) {
-                existingNotification.remove();
-            }
-
-            const colors = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                warning: 'bg-yellow-500',
-                info: 'bg-blue-500'
-            };
-
-            const notification = document.createElement('div');
-            notification.className = `fixed-notification fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transform transition-transform duration-300`;
-            notification.textContent = message;
-
-            document.body.appendChild(notification);
-
-            // Auto remove after 5 seconds
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => notification.remove(), 300);
-            }, 5000);
-        }
-
-        // --- Fungsi untuk Manajemen Paket Soal ---
-
-        function fetchPackages() {
-            const container = document.getElementById('packages-container');
-            container.innerHTML = '<div class="text-center p-6">Memuat...</div>';
-            
-            fetch('manage_question_bank.php?fetch_list=true')
-                .then(res => {
-                    if (!res.ok) {
-                        throw new Error('Network response was not ok');
-                    }
-                    return res.json();
-                })
-                .then(data => {
-                    if (data.error) {
-                        container.innerHTML = `<div class="text-center p-6 text-red-500">Error: ${data.error}</div>`;
-                        return;
-                    }
-                    
-                    let html = `<table class="min-w-full bg-white">
-                        <thead class="bg-gray-800 text-white">
-                            <tr>
-                                <th class="py-3 px-4 text-left">Nama Paket Soal</th>
-                                <th class="py-3 px-4 text-center">Jumlah Soal</th>
-                                <th class="py-3 px-4 text-center">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-                    
-                    if (data.packages && data.packages.length > 0) {
-                        data.packages.forEach(p => {
-                            html += `<tr class="border-b hover:bg-gray-50">
-                                <td class="py-3 px-4 font-semibold">
-                                    <div class="text-gray-800">${escapeHtml(p.package_name)}</div>
-                                    ${p.description ? `<div class="text-sm text-gray-600 mt-1">${escapeHtml(p.description)}</div>` : ''}
-                                </td>
-                                <td class="py-3 px-4 text-center">
-                                    <span class="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-0.5 rounded-full">
-                                        ${p.question_count}
-                                    </span>
-                                </td>
-                                <td class="py-3 px-4 text-center">
-                                    <button onclick="openQuestionManagerFromButton(this, ${p.id})" 
-                                        data-package-name="${jsStringEscape(p.package_name)}"
-                                        class="bg-green-500 hover:bg-green-600 text-white text-sm font-bold py-1.5 px-3 rounded transition duration-200"
-                                        title="Isi Paket">
-                                        <i class="fas fa-edit mr-1"></i> Isi Paket
-                                    </button>
-                                    <button onclick="openPackageModalFromButton(this, ${p.id})" 
-                                        data-package-name="${jsStringEscape(p.package_name)}"
-                                        data-package-desc="${jsStringEscape(p.description || '')}"
-                                        class="text-blue-500 hover:text-blue-700 ml-3 transition duration-200" 
-                                        title="Edit">
-                                        <i class="fas fa-pencil-alt"></i>
-                                    </button>
-                                    <button onclick="deletePackage(${p.id})" 
-                                        class="text-red-500 hover:text-red-700 ml-3 transition duration-200" 
-                                        title="Hapus">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </td>
-                            </tr>`;
-                        });
-                    } else {
-                        html += `<tr>
-                            <td colspan="3" class="text-center py-8 text-gray-500">
-                                <i class="fas fa-inbox text-4xl mb-2 block"></i>
-                                Belum ada paket soal.
-                            </td>
-                        </tr>`;
-                    }
-                    
-                    html += `</tbody></table>`;
-                    container.innerHTML = html;
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    container.innerHTML = `<div class="text-center p-6 text-red-500">Error memuat data: ${error.message}</div>`;
-                });
-        }
-
-        function openPackageModal(id = '', name = '', desc = '') {
-            document.getElementById('packageForm').reset();
-            document.getElementById('packageModalTitle').textContent = id ? 'Edit Paket Soal' : 'Buat Paket Soal Baru';
-            document.getElementById('packageId').value = id;
-            document.getElementById('package_name').value = name;
-            document.getElementById('description').value = desc;
-            packageModal.classList.remove('hidden');
-        }
-
-        function openPackageModalFromButton(button, id) {
-            const packageName = button.getAttribute('data-package-name');
-            const packageDesc = button.getAttribute('data-package-desc');
-            
-            // Decode the escaped strings
-            const decodedName = decodeJsString(packageName);
-            const decodedDesc = decodeJsString(packageDesc);
-            
-            openPackageModal(id, decodedName, decodedDesc);
-        }
-
-        function closePackageModal() {
-            packageModal.classList.add('hidden');
-        }
-
-        document.getElementById('packageForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.textContent;
-            
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
-            submitBtn.disabled = true;
-
-            const formData = new FormData(this);
-            formData.append('action', 'save_package');
-            
-            fetch('manage_question_bank.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    closePackageModal();
-                    fetchPackages();
-                    showNotification('Paket soal berhasil disimpan!', 'success');
-                } else {
-                    showNotification(data.message || 'Gagal menyimpan paket soal', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Terjadi kesalahan saat menyimpan paket soal', 'error');
-            })
-            .finally(() => {
-                submitBtn.textContent = originalText;
-                submitBtn.disabled = false;
-            });
-        });
-
-        function deletePackage(id) {
-            if (!confirm('Anda yakin ingin menghapus paket ini? Soal yang ada di dalamnya tidak akan terhapus.')) {
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('action', 'delete_package');
-            formData.append('package_id', id);
-            
-            fetch('manage_question_bank.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    fetchPackages();
-                    showNotification('Paket soal berhasil dihapus!', 'success');
-                } else {
-                    showNotification(data.message || 'Gagal menghapus paket soal', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Terjadi kesalahan saat menghapus paket soal', 'error');
-            });
-        }
-
-        // --- Fungsi untuk Modal Manajer Soal ---
-
-        function openQuestionManager(packageId, packageName) {
-            currentPackageId = packageId;
-            document.getElementById('questionManagerTitle').textContent = `Kelola Soal untuk Paket: ${packageName}`;
-            questionManagerModal.classList.remove('hidden');
-            fetchQuestionsForPackage(packageId);
-        }
-
-        function openQuestionManagerFromButton(button, packageId) {
-            const packageName = button.getAttribute('data-package-name');
-            const decodedName = decodeJsString(packageName);
-            openQuestionManager(packageId, decodedName);
-        }
-
-        function closeQuestionManager() {
-            questionManagerModal.classList.add('hidden');
-        }
-
-        function fetchQuestionsForPackage(packageId) {
-            const container = document.getElementById('questionsListContainer');
-            container.innerHTML = '<div class="text-center p-4">Memuat soal...</div>';
-
-            fetch(`manage_package_contents.php?fetch_list_package=true&package_id=${packageId}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.questions && data.questions.length > 0) {
-                        container.innerHTML = data.questions.map(q => `
-                            <div class="flex justify-between items-center bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition duration-200">
-                                <div class="flex-grow">
-                                    <p class="text-gray-800 mb-2">${escapeHtml(q.question_text.substring(0, 120))}${q.question_text.length > 120 ? '...' : ''}</p>
-                                    <div class="flex items-center gap-4 text-sm text-gray-600">
-                                        ${q.image_path ? '<span class="flex items-center"><i class="fas fa-image mr-1"></i> Gambar</span>' : ''}
-                                        ${q.audio_path ? '<span class="flex items-center"><i class="fas fa-music mr-1"></i> Audio</span>' : ''}
-                                        <span class="flex items-center"><i class="fas fa-list-ol mr-1"></i> ${q.option_count || 0} Pilihan</span>
-                                    </div>
-                                </div>
-                                <div class="flex-shrink-0 ml-4 flex gap-2">
-                                    <button onclick="openQuestionFormModal('edit', ${q.id})" 
-                                        class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded transition duration-200" 
-                                        title="Edit">
-                                        <i class="fas fa-pencil-alt"></i>
-                                    </button>
-                                    <button onclick="deleteQuestion(${q.id})" 
-                                        class="bg-red-500 hover:bg-red-600 text-white p-2 rounded transition duration-200" 
-                                        title="Hapus">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        `).join('');
-                    } else {
-                        container.innerHTML = `
-                            <div class="text-center p-8 text-gray-500">
-                                <i class="fas fa-question-circle text-4xl mb-3 block"></i>
-                                <p>Belum ada soal di paket ini.</p>
-                                <button onclick="openQuestionFormModal('add')" 
-                                    class="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
-                                    <i class="fas fa-plus mr-2"></i>Tambah Soal Pertama
-                                </button>
-                            </div>`;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    container.innerHTML = `<div class="text-center p-4 text-red-500">Error memuat soal: ${error.message}</div>`;
-                });
-        }
-
-        // --- Fungsi untuk Modal Form Soal ---
-
-        function openQuestionFormModal(mode, id = null) {
-            const form = document.getElementById('questionForm');
-            form.reset();
-            document.getElementById('options-container').innerHTML = '';
-            document.getElementById('questionFormTitle').textContent = mode === 'add' ? 'Tambah Soal Baru' : 'Edit Soal';
-            document.getElementById('formAction').value = mode === 'add' ? 'add_question' : 'edit_question';
-            document.getElementById('questionId').value = id || '';
-            document.getElementById('formPackageId').value = currentPackageId;
-            document.getElementById('current_image_container').innerHTML = '';
-            document.getElementById('current_audio_container').innerHTML = '';
-            document.getElementById('image_upload_container').style.display = 'block';
-            document.getElementById('audio_upload_container').style.display = 'block';
-            document.getElementById('form-notification').innerHTML = '';
-
-            if (mode === 'edit' && id) {
-                // Load existing question data
-                fetch(`get_question_details.php?id=${id}`)
-                    .then(res => res.json())
-                    .then(result => {
-                        if (result.status === 'success') {
-                            const data = result.data;
-                            document.getElementById('question_text').value = data.question_text || '';
-                            
-                            if (data.image_path) {
-                                document.getElementById('image_upload_container').style.display = 'none';
-                                document.getElementById('current_image_container').innerHTML = `
-                                    <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                                        <img src="../${data.image_path}" class="w-32 h-32 object-cover rounded shadow-sm">
-                                        <div class="flex-1">
-                                            <p class="text-sm text-gray-600 mb-2">Gambar saat ini:</p>
-                                            <button type="button" onclick="deleteMedia(${id}, 'image')" 
-                                                class="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-1 px-3 rounded transition duration-200">
-                                                Hapus Gambar
-                                            </button>
-                                        </div>
-                                    </div>`;
-                            }
-                            
-                            if (data.audio_path) {
-                                document.getElementById('audio_upload_container').style.display = 'none';
-                                document.getElementById('current_audio_container').innerHTML = `
-                                    <div class="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                                        <audio controls class="flex-1">
-                                            <source src="../${data.audio_path}">
-                                            Browser Anda tidak mendukung elemen audio.
-                                        </audio>
-                                        <button type="button" onclick="deleteMedia(${id}, 'audio')" 
-                                            class="bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-1 px-3 rounded transition duration-200">
-                                            Hapus Audio
-                                        </button>
-                                    </div>`;
-                            }
-                            
-                            // Load options
-                            if (data.options && typeof data.options === 'object') {
-                                Object.entries(data.options).forEach(([key, value]) => {
-                                    addOptionField(value, key === data.correct_answer);
-                                });
-                            }
-                        } else {
-                            showNotification('Gagal memuat data soal', 'error');
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showNotification('Error memuat data soal', 'error');
-                    });
-            } else {
-                // Add default options for new question
-                addOptionField('', false);
-                addOptionField('', false);
-            }
-            
-            questionFormModal.classList.remove('hidden');
-        }
-
-        function closeQuestionFormModal() {
-            // Stop all audio playback
-            const audios = questionFormModal.querySelectorAll('audio');
-            audios.forEach(audio => {
-                if (!audio.paused) {
-                    audio.pause();
-                    audio.currentTime = 0;
-                }
-            });
-            questionFormModal.classList.add('hidden');
-        }
-
-        function addOptionField(value = '', isChecked = false) {
-            const container = document.getElementById('options-container');
-            const optionKey = String.fromCharCode(65 + container.children.length);
-            const newField = document.createElement('div');
-            newField.className = 'flex items-center gap-2 option-field p-3 bg-gray-50 rounded-lg';
-            newField.innerHTML = `
-                <input type="text" name="options[]" 
-                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                    value="${escapeHtml(value)}" 
-                    placeholder="Teks Pilihan ${optionKey}" 
-                    required>
-                <label class="flex items-center p-2 rounded-lg bg-white border border-gray-300 cursor-pointer hover:bg-gray-100 transition duration-200" 
-                    title="Jadikan ini jawaban benar">
-                    <input type="radio" name="correct_answer" value="${optionKey}" class="h-4 w-4 text-blue-600" ${isChecked ? 'checked' : ''}>
-                    <span class="ml-2 font-semibold text-gray-700">${optionKey}</span>
-                </label>
-                <button type="button" onclick="removeOptionField(this)" 
-                    class="text-red-500 hover:text-red-700 p-2 transition duration-200" 
-                    title="Hapus pilihan">
-                    <i class="fas fa-times"></i>
-                </button>`;
-            container.appendChild(newField);
-        }
-
-        function removeOptionField(button) {
-            if (document.querySelectorAll('.option-field').length <= 2) {
-                showNotification('Minimal harus ada 2 pilihan jawaban', 'warning');
-                return;
-            }
-            
-            button.closest('.option-field').remove();
-            updateOptionLabels();
-        }
-
-        function updateOptionLabels() {
-            const container = document.getElementById('options-container');
-            Array.from(container.children).forEach((field, index) => {
-                const newKey = String.fromCharCode(65 + index);
-                const radio = field.querySelector('input[type="radio"]');
-                const span = field.querySelector('span.font-semibold');
-                const textInput = field.querySelector('input[type="text"]');
+<div id="questionFormModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] hidden backdrop-blur-sm px-0 sm:px-4">
+    <div class="bg-white w-full h-full sm:h-[90vh] sm:rounded-xl shadow-2xl sm:max-w-5xl flex flex-col overflow-hidden transition-all">
+        <div class="p-4 border-b bg-white flex justify-between items-center shrink-0">
+            <h2 id="questionFormTitle" class="text-lg font-bold text-gray-800"></h2>
+            <button onclick="closeQuestionFormModal()" class="text-gray-500 hover:text-red-500 text-2xl px-2"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="flex-grow overflow-y-auto p-4 sm:p-6 bg-gray-50 custom-scrollbar">
+            <form id="questionForm" enctype="multipart/form-data">
+                <input type="hidden" name="action" id="formAction">
+                <input type="hidden" name="question_id" id="questionId">
+                <input type="hidden" name="package_id" id="formPackageId">
                 
-                radio.value = newKey;
-                span.textContent = newKey;
-                textInput.placeholder = `Teks Pilihan ${newKey}`;
-            });
-        }
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div class="bg-white p-4 rounded-lg border shadow-sm">
+                            <label class="block font-semibold mb-2 text-sm text-gray-700">Pertanyaan</label>
+                            <textarea name="question_text" id="question_text" rows="5" class="w-full px-3 py-2 border rounded-lg text-sm"></textarea>
+                        </div>
+                        
+                        <div class="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Gambar (Opsional)</label>
+                                <div id="image_upload_container" class="text-sm"><input type="file" name="image_file" id="image_file" accept="image/*" class="text-xs w-full"></div>
+                                <div id="preview_image_box" class="mt-3 hidden"><p class="text-[10px] text-gray-400 mb-1">Preview:</p><img id="preview_image_src" class="max-h-32 rounded border shadow-sm"></div>
+                                <div id="current_image_container" class="mt-2 text-xs"></div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Audio (Opsional)</label>
+                                <div id="audio_upload_container" class="text-sm"><input type="file" name="audio_file" id="audio_file" accept="audio/*" class="text-xs w-full"></div>
+                                <div id="preview_audio_box" class="mt-3 hidden"><p class="text-[10px] text-gray-400 mb-1">Preview:</p><audio id="preview_audio_src" controls class="w-full h-8"></audio></div>
+                                <div id="current_audio_container" class="mt-2 text-xs"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-4 rounded-lg border shadow-sm h-fit">
+                        <label class="block font-semibold mb-2 text-sm text-gray-700">Pilihan Jawaban</label>
+                        <div id="options-container" class="space-y-3"></div>
+                        <button type="button" onclick="addOptionField()" class="mt-4 text-sm text-indigo-600 font-bold hover:underline flex items-center transition-colors"><i class="fas fa-plus-circle mr-1"></i> Tambah Pilihan</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="p-4 border-t bg-white flex justify-end gap-3 shrink-0">
+            <button onclick="closeQuestionFormModal()" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors">Batal</button>
+            <button onclick="document.getElementById('questionForm').dispatchEvent(new Event('submit'))" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow text-sm font-medium transition-colors">Simpan Soal</button>
+        </div>
+    </div>
+</div>
 
-        document.getElementById('questionForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const submitBtn = document.getElementById('submitBtn');
-            const originalText = submitBtn.innerHTML;
-            
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
-            submitBtn.disabled = true;
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/6.8.2/tinymce.min.js" referrerpolicy="origin"></script>
 
-            const formData = new FormData(this);
-            
-            fetch('manage_package_contents.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    closeQuestionFormModal();
-                    fetchQuestionsForPackage(currentPackageId);
-                    showNotification('Soal berhasil disimpan!', 'success');
-                } else {
-                    showNotification(data.message || 'Terjadi kesalahan saat menyimpan soal.', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Error menyimpan soal: ' + error.message, 'error');
-            })
-            .finally(() => {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            });
-        });
+<script src="js/manage_question_bank.js"></script>
 
-        function deleteQuestion(id) {
-            if (!confirm('Anda yakin ingin menghapus soal ini? Tindakan ini tidak dapat dibatalkan.')) {
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('action', 'delete_question');
-            formData.append('question_id', id);
-            
-            fetch('manage_package_contents.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    fetchQuestionsForPackage(currentPackageId);
-                    showNotification('Soal berhasil dihapus!', 'success');
-                } else {
-                    showNotification(data.message || 'Gagal menghapus soal', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Error menghapus soal: ' + error.message, 'error');
-            });
-        }
-
-        function deleteMedia(questionId, mediaType) {
-            if (!confirm(`Anda yakin ingin menghapus ${mediaType === 'image' ? 'gambar' : 'audio'} ini?`)) {
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('action', 'delete_media');
-            formData.append('question_id', questionId);
-            formData.append('media_type', mediaType);
-            
-            fetch('manage_package_contents.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    document.getElementById(`current_${mediaType}_container`).innerHTML = '';
-                    document.getElementById(`${mediaType}_upload_container`).style.display = 'block';
-                    showNotification(`${mediaType === 'image' ? 'Gambar' : 'Audio'} berhasil dihapus`, 'success');
-                } else {
-                    showNotification('Gagal menghapus media: ' + (data.message || 'Error tidak diketahui'), 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showNotification('Error menghapus media: ' + error.message, 'error');
-            });
-        }
-
-        // --- Inisialisasi Halaman ---
-        document.addEventListener('DOMContentLoaded', function() {
-            fetchPackages();
-            
-            // Close modals when clicking outside
-            [packageModal, questionManagerModal, questionFormModal].forEach(modal => {
-                if (modal) {
-                    modal.addEventListener('click', function(e) {
-                        if (e.target === modal) {
-                            if (modal === packageModal) closePackageModal();
-                            if (modal === questionManagerModal) closeQuestionManager();
-                            if (modal === questionFormModal) closeQuestionFormModal();
-                        }
-                    });
-                }
-            });
-        });
-    </script>
-</body>
-</html>
+<?php require_once 'footer.php'; ?>

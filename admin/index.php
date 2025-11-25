@@ -1,216 +1,126 @@
 <?php
-// Menetapkan judul halaman untuk ditampilkan di header
-$page_title = 'Dashboard';
-
-// Memasukkan file header
+// admin/index.php (FINAL COMPLETE DASHBOARD)
+$page_title = 'Dashboard Admin';
 require_once 'header.php';
 
-// --- LOGIKA UNTUK MENGAMBIL DATA DASBOR DARI DATABASE ---
+// --- 1. AMBIL STATISTIK (MODULAR) ---
+$total_students = db()->single("SELECT COUNT(*) as total FROM users WHERE role = 'student'")['total'] ?? 0;
+$total_tests = db()->single("SELECT COUNT(*) as total FROM tests")['total'] ?? 0;
+$total_classes = db()->single("SELECT COUNT(*) as total FROM classes")['total'] ?? 0;
+$total_results = db()->single("SELECT COUNT(*) as total FROM test_results WHERE status = 'completed'")['total'] ?? 0;
 
-// 1. Menghitung jumlah total ujian
-$result_tests = $conn->query("SELECT COUNT(id) as total FROM tests");
-$jumlah_ujian = $result_tests->fetch_assoc()['total'];
-
-// 2. Menghitung jumlah total soal di bank soal
-$result_questions = $conn->query("SELECT COUNT(id) as total FROM questions");
-$jumlah_soal = $result_questions->fetch_assoc()['total'];
-
-// 3. Menghitung jumlah total siswa
-$result_students = $conn->query("SELECT COUNT(id) as total FROM users WHERE role = 'student'");
-$jumlah_siswa = $result_students->fetch_assoc()['total'];
-
-// 4. Mengambil 5 hasil ujian terbaru untuk ditampilkan di dasbor
-$sql_latest_results = "SELECT 
-                            tr.id,
-                            tr.score,
-                            u.username AS student_name,
-                            t.title AS test_title
-                        FROM 
-                            test_results tr
-                        JOIN 
-                            users u ON tr.student_id = u.id
-                        JOIN 
-                            tests t ON tr.test_id = t.id
-                        WHERE 
-                            tr.status = 'completed'
-                        ORDER BY 
-                            tr.end_time DESC
-                        LIMIT 5";
-$latest_results = $conn->query($sql_latest_results);
-
-// **BARU: Mengambil permintaan ujian ulang yang tertunda**
-$sql_retake_requests = "SELECT
-                            rr.id,
-                            u.username AS student_name,
-                            t.title AS test_title,
-                            rr.request_date
-                        FROM
-                            retake_requests rr
-                        JOIN
-                            users u ON rr.student_id = u.id
-                        JOIN
-                            tests t ON rr.test_id = t.id
-                        WHERE
-                            rr.status = 'pending'
-                        ORDER BY
-                            rr.request_date ASC";
-$retake_requests = $conn->query($sql_retake_requests);
-
-// ---------------------------------------------------------
-
+// --- 2. AMBIL PERMINTAAN REMEDIAL (PENDING) ---
+// Ini fitur baru yang Anda cari
+$pending_requests = db()->all("
+    SELECT rr.id, u.username, t.title, tr.score 
+    FROM retake_requests rr
+    JOIN users u ON rr.student_id = u.id
+    JOIN tests t ON rr.test_id = t.id
+    JOIN test_results tr ON rr.test_result_id = tr.id
+    WHERE rr.status = 'pending'
+    ORDER BY rr.request_date ASC
+");
 ?>
 
-<!-- Konten utama halaman dasbor dimulai di sini -->
-
-<!-- Grid untuk kartu statistik -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-
-    <!-- Kartu 1: Jumlah Ujian -->
-    <div
-        class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between hover:shadow-lg transition-shadow duration-300">
-        <div>
-            <p class="text-sm font-medium text-gray-500">Total Ujian</p>
-            <p class="text-3xl font-bold text-gray-800"><?php echo $jumlah_ujian; ?></p>
-        </div>
-        <div class="bg-blue-500 rounded-full p-4">
-            <i class="fas fa-file-alt text-white text-2xl"></i>
-        </div>
-    </div>
-
-    <!-- Kartu 2: Jumlah Soal -->
-    <div
-        class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between hover:shadow-lg transition-shadow duration-300">
-        <div>
-            <p class="text-sm font-medium text-gray-500">Soal di Bank Soal</p>
-            <p class="text-3xl font-bold text-gray-800"><?php echo $jumlah_soal; ?></p>
-        </div>
-        <div class="bg-green-500 rounded-full p-4">
-            <i class="fas fa-database text-white text-2xl"></i>
-        </div>
-    </div>
-
-    <!-- Kartu 3: Jumlah Siswa -->
-    <div
-        class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between hover:shadow-lg transition-shadow duration-300">
-        <div>
-            <p class="text-sm font-medium text-gray-500">Siswa Terdaftar</p>
-            <p class="text-3xl font-bold text-gray-800"><?php echo $jumlah_siswa; ?></p>
-        </div>
-        <div class="bg-yellow-500 rounded-full p-4">
-            <i class="fas fa-users text-white text-2xl"></i>
-        </div>
-    </div>
-
-    <!-- Kartu 4: Laporan (Link ke halaman laporan) -->
-    <a href="reports.php"
-        class="bg-white rounded-lg shadow-md p-6 flex items-center justify-between hover:shadow-lg transition-shadow duration-300">
-        <div>
-            <p class="text-sm font-medium text-gray-500">Laporan Hasil</p>
-            <p class="text-lg font-semibold text-gray-800">Lihat Laporan Lengkap</p>
-        </div>
-        <div class="bg-red-500 rounded-full p-4">
-            <i class="fas fa-chart-bar text-white text-2xl"></i>
-        </div>
-    </a>
-
+<div class="mb-6 md:mb-8">
+    <h1 class="text-xl md:text-3xl font-bold text-gray-800">Selamat Datang, Admin!</h1>
+    <p class="text-sm md:text-base text-gray-600 mt-1">Ringkasan aktivitas aplikasi CBT Anda.</p>
 </div>
 
-<!-- **BARU: Panel Permintaan Ujian Ulang** -->
-<div class="mt-8 bg-white rounded-lg shadow-md">
-    <div class="p-4 border-b">
-        <h2 class="text-xl font-bold text-gray-800">Permintaan Ujian Ulang</h2>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="min-w-full bg-white">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama
-                        Siswa</th>
-                    <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul
-                        Ujian</th>
-                    <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal
-                        Permintaan</th>
-                    <th class="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-700">
-                <?php if ($retake_requests && $retake_requests->num_rows > 0): ?>
-                    <?php while ($row = $retake_requests->fetch_assoc()): ?>
-                        <tr class="border-b">
-                            <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
-                            <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
-                            <td class="py-3 px-4"><?php echo date('d M Y, H:i', strtotime($row['request_date'])); ?></td>
-                            <td class="py-3 px-4 text-center space-x-2">
-                                <!-- PERBAIKAN DI SINI: Pesan konfirmasi diubah -->
-                                <a href="process_request.php?action=approve&id=<?php echo $row['id']; ?>"
-                                    class="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-1 px-3 rounded-full"
-                                    onclick="return confirm('Anda yakin ingin menyetujui permintaan ini?')">Setujui</a>
-                                <a href="process_request.php?action=reject&id=<?php echo $row['id']; ?>"
-                                    class="bg-red-500 hover:bg-red-600 text-white text-xs font-bold py-1 px-3 rounded-full"
-                                    onclick="return confirm('Anda yakin ingin menolak permintaan ini?')">Tolak</a>
+<div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-10">
+    <?php
+    function statCard($title, $count, $color, $icon) {
+        echo "
+        <div class='bg-white p-4 md:p-6 rounded-xl shadow-sm border-l-4 border-{$color}-500 hover:shadow-md transition-shadow'>
+            <div class='flex items-center justify-between'>
+                <div>
+                    <p class='text-xs font-bold text-gray-500 uppercase'>{$title}</p>
+                    <p class='text-2xl md:text-3xl font-bold text-gray-800 mt-1'>{$count}</p>
+                </div>
+                <div class='p-2 md:p-3 bg-{$color}-100 rounded-full text-{$color}-600'>
+                    <i class='fas fa-{$icon} fa-lg'></i>
+                </div>
+            </div>
+        </div>";
+    }
+    statCard('Total Siswa', $total_students, 'blue', 'users');
+    statCard('Total Kelas', $total_classes, 'green', 'chalkboard');
+    statCard('Ujian Dibuat', $total_tests, 'purple', 'file-alt');
+    statCard('Ujian Selesai', $total_results, 'orange', 'check-circle');
+    ?>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    
+    <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col">
+        <div class="p-4 border-b flex justify-between items-center">
+            <h3 class="font-bold text-gray-800"><i class="fas fa-bell text-yellow-500 mr-2"></i> Permintaan Remedial</h3>
+            <?php if(count($pending_requests) > 0): ?>
+                <span class="bg-red-100 text-red-600 text-xs font-bold px-2 py-1 rounded-full"><?php echo count($pending_requests); ?> Baru</span>
+            <?php endif; ?>
+        </div>
+        
+        <div class="p-0 overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Siswa</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase">Ujian</th>
+                        <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase">Skor Lama</th>
+                        <th class="px-4 py-3 text-center text-xs font-bold text-gray-500 uppercase">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <?php if (empty($pending_requests)): ?>
+                        <tr>
+                            <td colspan="4" class="px-4 py-8 text-center text-gray-500 text-sm">
+                                <i class="fas fa-check-circle text-green-400 text-2xl mb-2 block"></i>
+                                Tidak ada permintaan remedial baru.
                             </td>
                         </tr>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="4" class="text-center py-6 text-gray-500">
-                            Tidak ada permintaan ujian ulang yang tertunda.
-                        </td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
+                    <?php else: ?>
+                        <?php foreach ($pending_requests as $req): ?>
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-3 text-sm font-medium text-gray-900"><?php echo e($req['username']); ?></td>
+                                <td class="px-4 py-3 text-sm text-gray-600"><?php echo e($req['title']); ?></td>
+                                <td class="px-4 py-3 text-sm text-center text-red-600 font-bold"><?php echo floatval($req['score']); ?></td>
+                                <td class="px-4 py-3 text-center text-sm">
+                                    <a href="api/process_request.php?action=approve&id=<?php echo $req['id']; ?>" class="text-green-600 hover:text-green-900 mr-3 font-bold" title="Setujui" onclick="return confirm('Izinkan siswa ini ujian ulang?');"><i class="fas fa-check"></i> ACC</a>
+                                    <a href="api/process_request.php?action=reject&id=<?php echo $req['id']; ?>" class="text-red-600 hover:text-red-900 font-bold" title="Tolak" onclick="return confirm('Tolak permintaan ini?');"><i class="fas fa-times"></i> Tolak</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="lg:col-span-1 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+            <h3 class="font-bold text-gray-800 mb-3">Aksi Cepat</h3>
+            <div class="space-y-2">
+                <a href="manage_tests.php" class="block w-full text-left px-4 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-lg text-indigo-700 text-sm font-semibold transition-colors">
+                    <i class="fas fa-plus-circle mr-2"></i> Buat Ujian Baru
+                </a>
+                <a href="manage_students.php" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-700 text-sm font-semibold transition-colors">
+                    <i class="fas fa-user-plus mr-2"></i> Tambah Siswa
+                </a>
+                <a href="manage_question_bank.php" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-gray-700 text-sm font-semibold transition-colors">
+                    <i class="fas fa-book mr-2"></i> Tambah Paket Soal
+                </a>
+            </div>
+        </div>
+        
+        <div class="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-md p-5 text-white">
+            <h3 class="font-bold text-lg mb-2">Info Sistem</h3>
+            <p class="opacity-90 mb-4 text-sm">Aplikasi CBT Versi 3.0 (Modular)</p>
+            <div class="space-y-1 text-xs opacity-80">
+                <p><i class="fas fa-clock mr-2"></i> <?php echo date('d M Y, H:i'); ?> WIB</p>
+                <p><i class="fas fa-database mr-2"></i> Status DB: <span class="font-bold text-green-300">OK</span></p>
+            </div>
+        </div>
     </div>
 </div>
 
-
-<!-- Bagian Aktivitas Ujian Terbaru -->
-<div class="mt-8 bg-white rounded-lg shadow-md">
-    <div class="p-4 border-b flex justify-between items-center">
-        <h2 class="text-xl font-bold text-gray-800">Aktivitas Ujian Terbaru</h2>
-        <a href="reports.php" class="text-sm text-blue-600 hover:underline">Lihat Semua</a>
-    </div>
-    <div class="overflow-x-auto">
-        <table class="min-w-full bg-white">
-            <thead class="bg-gray-50">
-                <tr>
-                    <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama
-                        Siswa</th>
-                    <th class="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Judul
-                        Ujian</th>
-                    <th class="py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Skor
-                    </th>
-                </tr>
-            </thead>
-            <tbody class="text-gray-700">
-                <?php if ($latest_results && $latest_results->num_rows > 0): ?>
-                    <?php while ($row = $latest_results->fetch_assoc()): ?>
-                        <tr class="border-b">
-                            <td class="py-3 px-4 font-semibold"><?php echo htmlspecialchars($row['student_name']); ?></td>
-                            <td class="py-3 px-4"><?php echo htmlspecialchars($row['test_title']); ?></td>
-                            <td class="py-3 px-4 text-center">
-                                <span
-                                    class="font-bold text-lg <?php echo $row['score'] >= 70 ? 'text-green-600' : 'text-red-600'; ?>">
-                                    <?php echo htmlspecialchars(number_format($row['score'], 2)); ?>
-                                </span>
-                            </td>
-                        </tr>
-                    <?php endwhile; ?>
-                <?php else: ?>
-                    <tr>
-                        <td colspan="3" class="text-center py-6 text-gray-500">
-                            Belum ada aktivitas ujian yang tercatat.
-                        </td>
-                    </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-</div>
-
-
-<?php
-// Memasukkan file footer
-require_once 'footer.php';
-?>
+<?php require_once 'footer.php'; ?>
