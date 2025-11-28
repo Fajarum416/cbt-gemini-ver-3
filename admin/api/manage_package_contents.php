@@ -1,86 +1,89 @@
 <?php
-// admin/manage_package_contents.php (FINAL FIXED VERSION)
-// Mencegah output liar (spasi/warning) merusak JSON
+// admin/api/manage_package_contents.php (REVISED)
+
+error_reporting(0);
+ini_set('display_errors', 0);
 ob_start();
 
-require_once '../../includes/functions.php';
-checkAccess('admin');
+// Sesuaikan path ini dengan struktur folder Anda
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 
-// Bersihkan buffer sebelum kirim header
+// Pastikan fungsi checkAccess ada, atau handle jika tidak
+if (function_exists('checkAccess')) {
+    checkAccess('admin');
+}
+
 ob_end_clean();
-
 header('Content-Type: application/json');
 
 // --- 1. FETCH LIST SOAL ---
 if (isset($_GET['fetch_list_package'])) {
     $pkg_id = $_GET['package_id'] ?? 0;
-    
     if (empty($pkg_id) || !is_numeric($pkg_id)) {
         echo json_encode(['status' => 'error', 'message' => 'ID Paket tidak valid.']);
         exit;
     }
-
-    // Menggunakan db()->all()
+    // Pastikan db() mengembalikan objek yang valid
     $questions = db()->all("SELECT id, question_text FROM questions WHERE package_id = ? ORDER BY id DESC", [$pkg_id]);
     echo json_encode(['status' => 'success', 'questions' => $questions]);
     exit;
 }
 
-// --- 2. PROSES AKSI (SIMPAN / HAPUS) ---
+// --- 2. PROSES AKSI ---
 if (isset($_POST['action'])) {
     $action = $_POST['action'];
 
-    // A. Hapus Soal (Beserta Gambar/Audio)
+    // A. Hapus Soal
     if ($action == 'delete_question') {
         $q_id = $_POST['question_id'];
-        
-        // Ambil path file dulu
-        $paths = db()->single("SELECT image_path, audio_path FROM questions WHERE id = ?", [$q_id]);
-        
-        if ($paths) {
-            if ($paths['image_path'] && file_exists('../' . $paths['image_path'])) unlink('../' . $paths['image_path']);
-            if ($paths['audio_path'] && file_exists('../' . $paths['audio_path'])) unlink('../' . $paths['audio_path']);
-        }
-
         db()->query("DELETE FROM questions WHERE id = ?", [$q_id]);
         echo json_encode(['status' => 'success']);
         exit;
     }
 
-    // B. Hapus Media Saja
+    // B. Hapus Media (Secara eksplisit via tombol delete di UI)
     if ($action == 'delete_media') {
         $q_id = $_POST['question_id'];
-        $type = $_POST['media_type']; // 'image' atau 'audio'
+        $type = $_POST['media_type'];
         $col = ($type === 'image') ? 'image_path' : 'audio_path';
-
-        $row = db()->single("SELECT $col FROM questions WHERE id = ?", [$q_id]);
-        if ($row && $row[$col] && file_exists('../' . $row[$col])) unlink('../' . $row[$col]);
+        
+        // Dapatkan path lama untuk dihapus file fisiknya jika perlu (opsional)
+        // $old = db()->single("SELECT $col FROM questions WHERE id = ?", [$q_id]);
         
         db()->query("UPDATE questions SET $col = NULL WHERE id = ?", [$q_id]);
         echo json_encode(['status' => 'success']);
         exit;
     }
 
-    // C. Helper Upload
-    function handle_upload($file_key, $dir, &$err) {
-        if (!isset($_FILES[$file_key]) || $_FILES[$file_key]['error'] != 0) return null;
+    // C. Helper: Cek Upload Baru ATAU Data Galeri
+    function handle_upload_or_existing($file_key, $existing_key, $dir, &$err) {
+        // 1. Prioritas Utama: Ada File Baru di-Upload?
+        if (isset($_FILES[$file_key]) && $_FILES[$file_key]['error'] == 0) {
+            $file = $_FILES[$file_key];
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            $allowed = ($dir === 'images') ? ['jpg','jpeg','png','gif','webp'] : ['mp3','wav','ogg','m4a'];
+            
+            if (!in_array($ext, $allowed)) { $err = "Tipe file ($ext) tidak diizinkan."; return null; }
+            if ($file['size'] > 5 * 1024 * 1024) { $err = "File max 5MB."; return null; }
 
-        $file = $_FILES[$file_key];
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        $allowed = ($dir === 'images') ? ['jpg','jpeg','png','gif','webp'] : ['mp3','wav','ogg','m4a'];
-        
-        if (!in_array($ext, $allowed)) { $err = "Tipe file salah."; return null; }
-        if ($file['size'] > 5 * 1024 * 1024) { $err = "File max 5MB."; return null; }
+            $new_name = uniqid('file_', true) . '.' . $ext;
+            
+            // Path Absolut untuk Upload (Root/uploads)
+            $target_dir = dirname(dirname(__DIR__)) . '/uploads/' . $dir . '/';
+            if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
 
-        $new_name = uniqid('file_', true) . '.' . $ext;
-        $target_dir = '../uploads/' . $dir . '/';
-        
-        if (!is_dir($target_dir)) mkdir($target_dir, 0777, true);
-
-        if (move_uploaded_file($file['tmp_name'], $target_dir . $new_name)) {
-            return 'uploads/' . $dir . '/' . $new_name;
+            if (move_uploaded_file($file['tmp_name'], $target_dir . $new_name)) {
+                return 'uploads/' . $dir . '/' . $new_name;
+            }
+            $err = "Gagal upload ke server."; return null;
         }
-        $err = "Gagal upload."; return null;
+        
+        // 2. Prioritas Kedua: Apakah User Memilih dari Galeri?
+        if (isset($_POST[$existing_key]) && !empty($_POST[$existing_key])) {
+            return $_POST[$existing_key]; 
+        }
+
+        return null; // Tidak ada perubahan
     }
 
     // D. Tambah/Edit Soal
@@ -90,21 +93,19 @@ if (isset($_POST['action'])) {
         $opts = $_POST['options'] ?? [];
         $correct = $_POST['correct_answer'] ?? '';
 
-        if (empty($text) || count($opts) < 2 || empty($correct)) {
-            echo json_encode(['status' => 'error', 'message' => 'Data tidak lengkap.']);
-            exit;
-        }
+        // Validasi dasar
+        if (empty($text)) { echo json_encode(['status' => 'error', 'message' => 'Pertanyaan wajib diisi.']); exit; }
 
-        // Format JSON
-        $opts_assoc = [];
-        $char = 65; 
-        foreach ($opts as $o) { $opts_assoc[chr($char++)] = $o; }
+        // Konversi Pilihan ke JSON
+        $opts_assoc = []; $char = 65; 
+        if(is_array($opts)) foreach ($opts as $o) { $opts_assoc[chr($char++)] = $o; }
         $json_opts = json_encode($opts_assoc);
 
-        // Upload
         $err = '';
-        $img_path = handle_upload('image_file', 'images', $err);
-        $aud_path = handle_upload('audio_file', 'audio', $err);
+        
+        // PANGGIL HELPER BARU
+        $img_path = handle_upload_or_existing('image_file', 'existing_image', 'images', $err);
+        $aud_path = handle_upload_or_existing('audio_file', 'existing_audio', 'audio', $err);
         
         if ($err) { echo json_encode(['status' => 'error', 'message' => $err]); exit; }
 
@@ -117,16 +118,9 @@ if (isset($_POST['action'])) {
             $sql = "UPDATE questions SET question_text=?, options=?, correct_answer=?";
             $params = [$text, $json_opts, $correct];
             
-            $old = db()->single("SELECT image_path, audio_path FROM questions WHERE id=?", [$q_id]);
-
-            if ($img_path) {
-                $sql .= ", image_path=?"; $params[] = $img_path;
-                if($old['image_path'] && file_exists('../'.$old['image_path'])) unlink('../'.$old['image_path']);
-            }
-            if ($aud_path) {
-                $sql .= ", audio_path=?"; $params[] = $aud_path;
-                if($old['audio_path'] && file_exists('../'.$old['audio_path'])) unlink('../'.$old['audio_path']);
-            }
+            // Logic Update: Hanya update kolom jika ada file baru/pilihan baru
+            if ($img_path) { $sql .= ", image_path=?"; $params[] = $img_path; }
+            if ($aud_path) { $sql .= ", audio_path=?"; $params[] = $aud_path; }
             
             $sql .= " WHERE id=?"; $params[] = $q_id;
             db()->query($sql, $params);
@@ -136,6 +130,5 @@ if (isset($_POST['action'])) {
         exit;
     }
 }
-
-// Default Error jika aksi tidak ditemukan
 echo json_encode(['status' => 'error', 'message' => 'Aksi tidak valid.']);
+?>

@@ -1,5 +1,5 @@
 <?php
-// admin/header.php (OPTIMIZED FOR MOBILE)
+// admin/header.php (OPTIMIZED FOR MOBILE & MEDIA TAB ADDED)
 require_once '../includes/functions.php';
 checkAccess('admin');
 $username = $_SESSION['username'] ?? 'Admin';
@@ -25,7 +25,8 @@ $username = $_SESSION['username'] ?? 'Admin';
 
     <nav class="bg-indigo-600 shadow-lg sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-14 md:h-16"> <div class="flex items-center">
+            <div class="flex items-center justify-between h-14 md:h-16"> 
+                <div class="flex items-center">
                     <a href="index.php" class="flex-shrink-0 text-white font-bold text-lg md:text-xl flex items-center gap-2">
                         <i class="fas fa-laptop-code"></i> <span>CBT Admin</span>
                     </a>
@@ -36,6 +37,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                             <a href="manage_classes.php" class="text-indigo-100 hover:bg-indigo-500 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Kelas</a>
                             <a href="manage_tests.php" class="text-indigo-100 hover:bg-indigo-500 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Ujian</a>
                             <a href="manage_question_bank.php" class="text-indigo-100 hover:bg-indigo-500 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Bank Soal</a>
+                            <a href="media_manager.php" class="text-indigo-100 hover:bg-indigo-500 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Media</a>
                             <a href="reports.php" class="text-indigo-100 hover:bg-indigo-500 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors">Laporan</a>
                         </div>
                     </div>
@@ -63,6 +65,7 @@ $username = $_SESSION['username'] ?? 'Admin';
                 <a href="manage_classes.php" class="text-indigo-100 hover:text-white hover:bg-indigo-600 block px-3 py-2 rounded-md text-base font-medium"><i class="fas fa-chalkboard w-6 text-center"></i> Kelas</a>
                 <a href="manage_tests.php" class="text-indigo-100 hover:text-white hover:bg-indigo-600 block px-3 py-2 rounded-md text-base font-medium"><i class="fas fa-file-alt w-6 text-center"></i> Ujian</a>
                 <a href="manage_question_bank.php" class="text-indigo-100 hover:text-white hover:bg-indigo-600 block px-3 py-2 rounded-md text-base font-medium"><i class="fas fa-book w-6 text-center"></i> Bank Soal</a>
+                <a href="media_manager.php" class="text-indigo-100 hover:text-white hover:bg-indigo-600 block px-3 py-2 rounded-md text-base font-medium"><i class="fas fa-photo-video w-6 text-center"></i> Media</a>
                 <a href="reports.php" class="text-indigo-100 hover:text-white hover:bg-indigo-600 block px-3 py-2 rounded-md text-base font-medium"><i class="fas fa-chart-bar w-6 text-center"></i> Laporan</a>
             </div>
         </div>

@@ -2,7 +2,7 @@
 // admin/api/classes.php
 // Backend API untuk Kelas
 
-require_once '../../includes/functions.php'; // Naik 2 level
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 checkAccess('admin'); 
 header('Content-Type: application/json');
 

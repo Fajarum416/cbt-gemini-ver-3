@@ -1,5 +1,5 @@
 <?php
-require_once '../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 checkAccess('admin');
 
 if (!isset($_GET['id']) || !is_numeric($_GET['id']) || !isset($_GET['action'])) {

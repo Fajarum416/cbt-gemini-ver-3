@@ -1,5 +1,5 @@
 <?php
-require_once '../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 checkAccess('admin');
 header('Content-Type: application/json');
 

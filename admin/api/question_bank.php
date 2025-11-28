@@ -2,7 +2,7 @@
 // admin/api/question_bank.php
 // Backend API untuk Paket Soal
 
-require_once '../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 checkAccess('admin'); 
 header('Content-Type: application/json');
 

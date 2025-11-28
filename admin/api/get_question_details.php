@@ -8,7 +8,7 @@ ini_set('display_errors', 0);
 ob_start();
 
 // Naik 2 level ke includes
-require_once '../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 
 checkAccess('admin');
 

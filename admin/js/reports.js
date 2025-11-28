@@ -19,16 +19,16 @@ function fetchReports(page = 1) {
   const s = document.getElementById('searchInput').value
   const c = document.getElementById('categoryFilter').value
   document.getElementById('reports-table-container').innerHTML =
-    '<div class="text-center p-8 text-gray-500 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat data...</div>'
+    '<div class="text-center p-8 text-gray-500 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i> Memuat data...</div>'
 
-  // URL KE API (api/reports.php)
   fetch(`api/reports.php?fetch_list=true&page=${page}&search=${s}&category=${c}`)
     .then(r => r.json())
     .then(data => {
+      // HEADER TABEL INDIGO (KONSISTEN)
       let h = `<table class="min-w-full divide-y divide-gray-200">
             <thead class="bg-indigo-600 text-white">
                 <tr>
-                    <th class="px-4 py-3 md:px-6 text-left text-xs font-bold uppercase tracking-wider">Siswa</th>
+                    <th class="px-4 py-3 md:px-6 text-left text-xs font-bold uppercase tracking-wider w-1/4">Siswa</th>
                     <th class="px-4 py-3 md:px-6 text-left text-xs font-bold uppercase tracking-wider">Ujian</th>
                     <th class="px-4 py-3 md:px-6 text-center text-xs font-bold uppercase tracking-wider">Skor</th>
                     <th class="hidden sm:table-cell px-4 py-3 md:px-6 text-center text-xs font-bold uppercase tracking-wider">Waktu</th>
@@ -38,37 +38,53 @@ function fetchReports(page = 1) {
 
       if (data.reports.length) {
         data.reports.forEach(r => {
-          const scoreColor = r.score >= 70 ? 'text-green-600' : 'text-red-600'
-          h += `<tr class="hover:bg-gray-50 transition-colors">
-                        <td class="px-4 py-3 md:px-6 font-medium text-gray-900 text-sm">${
-                          r.student_name
-                        }</td>
+          // Logika Warna Skor
+          const passing = parseFloat(r.score) >= parseFloat(r.passing_grade)
+          const scoreColor = passing ? 'text-green-600' : 'text-red-600'
+          const scoreBg = passing ? 'bg-green-50' : 'bg-red-50'
+
+          h += `<tr class="hover:bg-indigo-50 transition-colors">
+                        <td class="px-4 py-3 md:px-6 font-medium text-gray-900 text-sm">
+                            <div class="flex items-center">
+                                <div class="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 mr-3"><i class="fas fa-user"></i></div>
+                                ${r.student_name}
+                            </div>
+                        </td>
                         <td class="px-4 py-3 md:px-6 text-sm">
                             <div class="font-semibold text-gray-700">${r.test_title}</div>
-                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 mt-1">${
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 text-gray-500 mt-1 border border-gray-200">${
                               r.test_category
                             }</span>
                         </td>
-                        <td class="px-4 py-3 md:px-6 text-center text-lg font-bold ${scoreColor}">${parseFloat(
-            r.score,
-          ).toFixed(2)}</td>
-                        <td class="hidden sm:table-cell px-4 py-3 md:px-6 text-gray-500 text-xs text-center whitespace-nowrap">${new Date(
-                          r.end_time,
-                        ).toLocaleString('id-ID')}</td>
+                        <td class="px-4 py-3 md:px-6 text-center">
+                            <div class="inline-block px-3 py-1 rounded-lg font-bold text-sm ${scoreColor} ${scoreBg} border border-opacity-20">
+                                ${parseFloat(r.score).toFixed(2)}
+                            </div>
+                        </td>
+                        <td class="hidden sm:table-cell px-4 py-3 md:px-6 text-gray-500 text-xs text-center whitespace-nowrap">
+                            ${new Date(r.end_time).toLocaleString('id-ID', {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                        </td>
                         <td class="px-4 py-3 md:px-6 text-center">
                             <div class="flex justify-center gap-2">
-                                <button onclick="openModal(${
+                                <button onclick="window.openModal(${
                                   r.id
-                                })" class="bg-blue-50 text-blue-600 p-2 rounded hover:bg-blue-100 transition-colors" title="Detail"><i class="fas fa-eye"></i></button>
-                                <button onclick="openDeleteModal(${
+                                })" class="bg-white border border-gray-200 text-blue-600 hover:border-blue-300 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors shadow-sm text-xs font-bold flex items-center">
+                                    <i class="fas fa-eye mr-1"></i> Detail
+                                </button>
+                                <button onclick="window.openDeleteModal(${
                                   r.id
-                                })" class="bg-red-50 text-red-600 p-2 rounded hover:bg-red-100 transition-colors" title="Hapus"><i class="fas fa-trash"></i></button>
+                                })" class="bg-white border border-gray-200 text-red-600 hover:border-red-300 hover:bg-red-50 px-3 py-1.5 rounded-md transition-colors shadow-sm text-xs font-bold flex items-center">
+                                    <i class="fas fa-trash mr-1"></i> Hapus
+                                </button>
                             </div>
                         </td>
                     </tr>`
         })
       } else {
-        h += `<tr><td colspan="5" class="p-8 text-center text-gray-500 text-sm">Belum ada laporan hasil ujian.</td></tr>`
+        h += `<tr><td colspan="5" class="p-12 text-center text-gray-400 text-sm border-dashed border-2 rounded-lg m-4"><i class="fas fa-clipboard-list text-3xl mb-2 block opacity-50"></i>Belum ada laporan ujian.</td></tr>`
       }
       document.getElementById('reports-table-container').innerHTML = h + `</tbody></table>`
       renderPagination(data.pagination)

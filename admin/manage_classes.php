@@ -1,5 +1,5 @@
 <?php
-// admin/manage_classes.php (FRONTEND UI ONLY)
+// admin/manage_classes.php (FINAL UI - CARD VIEW FIX)
 $page_title = 'Manajemen Kelas';
 require_once 'header.php';
 ?>
@@ -17,14 +17,12 @@ require_once 'header.php';
     </div>
 </div>
 
-<div class="bg-white shadow-lg rounded-xl overflow-hidden border border-gray-100">
-    <div id="classes-table-container" class="overflow-x-auto"></div>
-</div>
+<div id="classes-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6"></div>
 
 <div id="classModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden backdrop-blur-sm px-0 sm:px-4">
     <div class="bg-white w-full h-full sm:h-auto sm:rounded-xl shadow-2xl sm:max-w-4xl sm:max-h-[90vh] flex flex-col overflow-hidden">
         
-        <div class="p-4 sm:p-6 border-b bg-indigo-50 flex justify-between items-center">
+        <div class="p-4 sm:p-6 border-b bg-indigo-50 flex justify-between items-center shrink-0">
             <h2 id="modalTitle" class="text-lg sm:text-xl font-bold text-indigo-900"></h2>
             <button onclick="closeClassModal()" class="text-gray-500 hover:text-red-500 p-2"><i class="fas fa-times text-xl"></i></button>
         </div>
@@ -56,12 +54,12 @@ require_once 'header.php';
             </div>
         </div>
 
-        <div class="p-4 sm:p-6 border-t bg-white flex justify-between items-center">
+        <div class="p-4 sm:p-6 border-t bg-white flex justify-between items-center shrink-0">
             <button onclick="closeClassModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium text-sm">Batal</button>
             <div class="flex gap-2">
                 <button id="backBtn" onclick="goToStep(1)" class="px-4 py-2 bg-gray-300 text-gray-800 rounded-lg font-medium text-sm hidden">Kembali</button>
                 <button id="nextBtn" onclick="goToStep(2, true)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium shadow text-sm">Lanjut</button>
-                <button id="saveBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow text-sm hidden">Simpan</button>
+                <button id="saveBtn" onclick="saveAllChanges()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium shadow text-sm hidden">Simpan</button>
             </div>
         </div>
     </div>
@@ -74,7 +72,7 @@ require_once 'header.php';
         </div>
         <h3 class="text-lg font-bold text-gray-900 mb-2">Hapus Kelas?</h3>
         <p class="text-sm text-gray-500 mb-6">Data kelas beserta keanggotaannya akan dihapus.</p>
-        <div class="flex flex-col-reverse sm:flex-row justify-center gap-3">
+        <div class="flex justify-center gap-3">
             <button onclick="closeDeleteModal()" class="w-full sm:w-auto px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium">Batal</button>
             <button id="confirmDeleteBtn" class="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium shadow">Ya, Hapus</button>
         </div>

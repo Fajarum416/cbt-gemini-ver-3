@@ -9,7 +9,7 @@ ini_set('display_errors', 0);
 ob_start();
 
 // 3. Gunakan Absolute Path agar tidak pernah salah alamat
-require_once __DIR__ . '/../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 
 checkAccess('admin');
 
@@ -55,12 +55,16 @@ try {
     // 2. Insert Soal
     db()->query("DELETE FROM test_questions WHERE test_id = ?", [$id]);
     if (!empty($qs)) {
-        $sql_q = "INSERT INTO test_questions (test_id, question_id, question_order, points) VALUES ";
+        // PERBAIKAN: Menambahkan kolom section_name
+        $sql_q = "INSERT INTO test_questions (test_id, question_id, question_order, points, section_name) VALUES ";
         $vals = [];
         foreach ($qs as $idx => $q) {
-            $vals[] = "($id, " . (int)$q['id'] . ", " . ($idx + 1) . ", " . (float)$q['points'] . ")";
+            // Ambil section_name dari input, default NULL jika tidak ada
+            $sec = isset($q['section_name']) && !empty($q['section_name']) ? "'" . db()->conn->real_escape_string($q['section_name']) . "'" : "NULL";
+            
+            $vals[] = "($id, " . (int)$q['id'] . ", " . ($idx + 1) . ", " . (float)$q['points'] . ", $sec)";
         }
-        // Gunakan raw query untuk bulk insert agar cepat
+        // Eksekusi raw query
         if (!$conn->query($sql_q . implode(', ', $vals))) {
             throw new Exception("Gagal menyimpan soal: " . $conn->error);
         }

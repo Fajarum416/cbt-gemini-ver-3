@@ -4,7 +4,7 @@ error_reporting(0);
 ini_set('display_errors', 0);
 ob_start();
 
-require_once __DIR__ . '/../../includes/functions.php';
+require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
 
 checkAccess('admin');
 ob_end_clean(); // Bersihkan buffer
@@ -40,7 +40,8 @@ if ($details) {
 }
 
 // 2. Ambil Soal
-$sql_q = "SELECT q.id, q.question_text, tq.points 
+// PERBAIKAN: Tambahkan tq.section_name
+$sql_q = "SELECT q.id, q.question_text, tq.points, tq.section_name 
           FROM questions q 
           JOIN test_questions tq ON q.id = tq.question_id 
           WHERE tq.test_id = ? 
