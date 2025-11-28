@@ -1,11 +1,15 @@
-// admin/js/media_manager.js (FINAL PRO: DRAG-DROP & LIGHTBOX)
+// admin/js/media_manager.js (FINAL HYBRID: DEFAULT FLAT VIEW)
 
 let currentFolderId = 0
 let currentFilter = 'all'
 let currentSearch = ''
-let draggedItem = null // Menyimpan data item yang sedang di-drag
+let currentViewMode = 'flat' // DEFAULT: Langsung tampilkan semua gambar
+let draggedItem = null
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Inject Tombol Toggle Mode di UI jika belum ada
+  injectViewModeToggle()
+
   loadMediaContent(0)
 
   let timeout = null
@@ -22,6 +26,63 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })
 
+// Fungsi Inject Tombol Toggle (Agar tidak perlu edit HTML manual)
+function injectViewModeToggle() {
+  // Cari container filter (div yang ada tombol "Semua", "Gambar", "Audio")
+  const filterContainer = document.querySelector('.flex.bg-gray-100.p-1.rounded-lg')
+  if (filterContainer) {
+    // Buat separator kecil
+    const sep = document.createElement('div')
+    sep.className = 'w-px bg-gray-300 mx-2 my-1'
+    filterContainer.appendChild(sep)
+
+    // Tombol Mode Flat (Semua)
+    const btnFlat = document.createElement('button')
+    btnFlat.id = 'view-mode-flat'
+    btnFlat.className =
+      'px-3 py-1.5 text-xs font-bold rounded-md text-gray-500 hover:text-gray-700 transition-all'
+    btnFlat.innerHTML = '<i class="fas fa-layer-group mr-1"></i> Semua'
+    btnFlat.onclick = () => switchViewMode('flat')
+
+    // Tombol Mode Folder
+    const btnFolder = document.createElement('button')
+    btnFolder.id = 'view-mode-hierarchy'
+    btnFolder.className =
+      'px-3 py-1.5 text-xs font-bold rounded-md text-gray-500 hover:text-gray-700 transition-all'
+    btnFolder.innerHTML = '<i class="fas fa-folder mr-1"></i> Folder'
+    btnFolder.onclick = () => switchViewMode('hierarchy')
+
+    filterContainer.appendChild(btnFlat)
+    filterContainer.appendChild(btnFolder)
+
+    updateViewModeUI()
+  }
+}
+
+function switchViewMode(mode) {
+  currentViewMode = mode
+  currentFolderId = 0 // Reset ke root jika ganti mode
+  updateViewModeUI()
+  loadMediaContent(0)
+}
+
+function updateViewModeUI() {
+  const btnFlat = document.getElementById('view-mode-flat')
+  const btnFolder = document.getElementById('view-mode-hierarchy')
+  if (!btnFlat || !btnFolder) return
+
+  const activeClass = 'bg-white text-indigo-600 shadow-sm'
+  const inactiveClass = 'text-gray-500 hover:text-gray-700'
+
+  if (currentViewMode === 'flat') {
+    btnFlat.className = `px-3 py-1.5 text-xs font-bold rounded-md transition-all ${activeClass}`
+    btnFolder.className = `px-3 py-1.5 text-xs font-bold rounded-md transition-all ${inactiveClass}`
+  } else {
+    btnFlat.className = `px-3 py-1.5 text-xs font-bold rounded-md transition-all ${inactiveClass}`
+    btnFolder.className = `px-3 py-1.5 text-xs font-bold rounded-md transition-all ${activeClass}`
+  }
+}
+
 window.loadMediaContent = function (folderId) {
   if (currentSearch === '') currentFolderId = folderId
 
@@ -32,8 +93,9 @@ window.loadMediaContent = function (folderId) {
 
   if (loader) loader.classList.remove('hidden')
 
+  // Kirim view_mode ke API
   fetch(
-    `api/media.php?action=list&folder_id=${currentFolderId}&search=${currentSearch}&type=${currentFilter}`,
+    `api/media.php?action=list&folder_id=${currentFolderId}&search=${currentSearch}&type=${currentFilter}&view_mode=${currentViewMode}`,
   )
     .then(r => r.json())
     .then(data => {
@@ -46,10 +108,13 @@ window.loadMediaContent = function (folderId) {
         data.breadcrumbs.forEach((b, idx) => {
           const isLast = idx === data.breadcrumbs.length - 1
           if (idx > 0) breadHtml += `<span class="text-gray-300 mx-2">/</span>`
-          if (isLast)
+
+          if (isLast) {
             breadHtml += `<span class="font-bold text-gray-700 cursor-default">${b.name}</span>`
-          else
-            breadHtml += `<button onclick="window.loadMediaContent(${b.id})" class="text-indigo-600 hover:underline font-medium">${b.name}</button>`
+          } else {
+            // Jika klik breadcrumb folder, pastikan mode hierarchy
+            breadHtml += `<button onclick="window.switchViewMode('hierarchy'); window.loadMediaContent(${b.id})" class="text-indigo-600 hover:underline font-medium">${b.name}</button>`
+          }
         })
       }
       if (bread) bread.innerHTML = breadHtml
@@ -60,41 +125,39 @@ window.loadMediaContent = function (folderId) {
       } else {
         if (emptyState) emptyState.classList.add('hidden')
 
-        // --- RENDER FOLDERS (DROP ZONE) ---
-        if (currentFilter === 'all' && currentSearch === '') {
+        // --- RENDER FOLDERS (Hanya tampil di mode hierarchy) ---
+        if (currentViewMode === 'hierarchy') {
           data.folders.forEach(f => {
             grid.innerHTML += `
-                    <div onclick="window.loadMediaContent(${f.id})" 
-                         class="group cursor-pointer p-3 rounded-lg border border-transparent hover:bg-indigo-50 hover:border-indigo-100 transition-all flex flex-col items-center relative folder-item"
-                         ondragover="window.handleDragOver(event, this)" 
-                         ondragleave="window.handleDragLeave(event, this)" 
-                         ondrop="window.handleDrop(event, ${f.id})">
-                        
-                        <i class="fas fa-folder text-yellow-400 text-5xl mb-2 drop-shadow-sm group-hover:scale-110 transition-transform"></i>
-                        <span class="text-xs font-medium text-gray-700 text-center w-full truncate select-none">${f.name}</span>
-                        
-                        <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex bg-white rounded shadow-sm z-10">
-                            <button onclick="window.renameItem(event, ${f.id}, '${f.name}', 'folder')" class="text-blue-500 hover:text-blue-700 p-1.5" title="Ganti Nama"><i class="fas fa-edit"></i></button>
-                            <button onclick="window.deleteItem(event, ${f.id}, 'folder')" class="text-red-400 hover:text-red-600 p-1.5" title="Hapus"><i class="fas fa-trash-alt"></i></button>
-                        </div>
-                    </div>`
+                        <div onclick="window.loadMediaContent(${f.id})" 
+                            class="group cursor-pointer p-3 rounded-lg border border-transparent hover:bg-indigo-50 hover:border-indigo-100 transition-all flex flex-col items-center relative folder-item"
+                            ondragover="window.handleDragOver(event, this)" 
+                            ondragleave="window.handleDragLeave(event, this)" 
+                            ondrop="window.handleDrop(event, ${f.id})">
+                            
+                            <i class="fas fa-folder text-yellow-400 text-5xl mb-2 drop-shadow-sm group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-gray-700 text-center w-full truncate select-none">${f.name}</span>
+                            
+                            <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex bg-white rounded shadow-sm z-10">
+                                <button onclick="window.renameItem(event, ${f.id}, '${f.name}', 'folder')" class="text-blue-500 hover:text-blue-700 p-1.5" title="Ganti Nama"><i class="fas fa-edit"></i></button>
+                                <button onclick="window.deleteItem(event, ${f.id}, 'folder')" class="text-red-400 hover:text-red-600 p-1.5" title="Hapus"><i class="fas fa-trash-alt"></i></button>
+                            </div>
+                        </div>`
           })
         }
 
-        // --- RENDER FILES (DRAGGABLE) ---
+        // --- RENDER FILES ---
         data.files.forEach(f => {
           let preview = ''
           let actionBtn = ''
 
           if (f.file_type === 'image') {
             preview = `<img src="../${f.file_path}" class="h-24 w-full object-cover rounded-md mb-2 bg-gray-100" onerror="this.src='https://placehold.co/100x100?text=Error'">`
-            // Tombol Lihat untuk Gambar -> Lightbox
             actionBtn = `<button onclick="window.openLightbox('../${f.file_path}', '${f.file_name}')" class="bg-white text-blue-600 p-2 rounded-full shadow hover:bg-blue-50 transform hover:scale-110 transition-transform" title="Preview"><i class="fas fa-expand"></i></button>`
           } else {
             preview = `<div class="h-24 w-full flex items-center justify-center bg-blue-50 rounded-md mb-2 text-blue-400"><i class="fas fa-${
               f.file_type === 'audio' ? 'music' : 'file-alt'
             } text-3xl"></i></div>`
-            // Tombol Lihat untuk Lainnya -> Tab Baru
             actionBtn = `<a href="../${f.file_path}" target="_blank" class="bg-white text-blue-600 p-2 rounded-full shadow hover:bg-blue-50 transform hover:scale-110 transition-transform" title="Download/Play"><i class="fas fa-download"></i></a>`
           }
 
@@ -117,32 +180,28 @@ window.loadMediaContent = function (folderId) {
     })
 }
 
-// --- DRAG & DROP LOGIC (CORE) ---
+// --- DRAG & DROP LOGIC ---
 
 window.handleDragStart = function (e, id, type) {
   draggedItem = { id: id, type: type }
   e.dataTransfer.effectAllowed = 'move'
-  // Sedikit transparan saat ditarik
   e.target.style.opacity = '0.5'
 }
 
 window.handleDragOver = function (e, element) {
-  e.preventDefault() // Wajib agar bisa drop
+  e.preventDefault()
   e.dataTransfer.dropEffect = 'move'
-  // Efek visual saat berada di atas folder
   element.classList.add('bg-indigo-100', 'border-indigo-300', 'scale-105')
 }
 
 window.handleDragLeave = function (e, element) {
-  // Hapus efek visual
   element.classList.remove('bg-indigo-100', 'border-indigo-300', 'scale-105')
 }
 
 window.handleDrop = function (e, targetFolderId) {
   e.preventDefault()
-  e.stopPropagation() // Jangan buka folder saat drop
+  e.stopPropagation()
 
-  // Reset style
   const folderEl = e.currentTarget
   folderEl.classList.remove('bg-indigo-100', 'border-indigo-300', 'scale-105')
 
@@ -165,7 +224,7 @@ window.handleDrop = function (e, targetFolderId) {
       } else {
         alert(res.message)
       }
-      draggedItem = null // Reset
+      draggedItem = null
     })
 }
 
@@ -180,7 +239,6 @@ window.openLightbox = function (src, title) {
   info.innerText = title
 
   modal.classList.remove('hidden')
-  // Animasi zoom-in
   setTimeout(() => img.classList.remove('scale-95'), 10)
 }
 
@@ -188,15 +246,14 @@ window.closeLightbox = function () {
   const modal = document.getElementById('lightboxModal')
   const img = document.getElementById('lightboxImg')
 
-  img.classList.add('scale-95') // Animasi zoom-out
+  img.classList.add('scale-95')
   setTimeout(() => {
     modal.classList.add('hidden')
     img.src = ''
   }, 200)
 }
 
-// --- HELPER LAINNYA (Rename, Create, Delete, Upload - Tetap Sama) ---
-// Saya sertakan agar file Anda utuh
+// --- HELPER LAINNYA ---
 
 window.setFilter = function (type) {
   currentFilter = type
@@ -256,7 +313,7 @@ window.handleFileUpload = function (input) {
   const fd = new FormData()
   fd.append('action', 'upload_file')
   fd.append('file', input.files[0])
-  fd.append('folder_id', currentFolderId)
+  fd.append('folder_id', currentFolderId) // Akan masuk ke folder ID saat ini, atau default jika flat
   if (window.showNotification) window.showNotification('Mengupload...', 'info')
   fetch('api/media.php', { method: 'POST', body: fd })
     .then(r => r.json())

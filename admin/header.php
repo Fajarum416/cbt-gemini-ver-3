@@ -1,19 +1,26 @@
 <?php
-// admin/header.php (FINAL FORCE FIX: INLINE STYLE)
+// admin/header.php (REVISED: SAFE FUNCTION DECLARATION)
 require_once '../includes/functions.php';
-checkAccess('admin');
+
+// Pastikan fungsi ini ada/bisa diakses
+if (function_exists('checkAccess')) {
+    checkAccess('admin');
+}
+
 $username = $_SESSION['username'] ?? 'Admin';
 
 // --- LOGIKA HALAMAN AKTIF ---
 $current_page = basename($_SERVER['PHP_SELF']);
 
-// Fungsi helper untuk menu
-function navClass($target_page, $current_page) {
-    $base_style = "px-3 py-2 rounded-md text-sm font-medium transition-colors block ";
-    if ($target_page === $current_page) {
-        return $base_style . "bg-indigo-800 text-white shadow-inner"; 
-    } else {
-        return $base_style . "text-indigo-100 hover:bg-indigo-500 hover:text-white";
+// Fungsi helper untuk menu (Dibungkus agar tidak error jika file ter-include ganda)
+if (!function_exists('navClass')) {
+    function navClass($target_page, $current_page) {
+        $base_style = "px-3 py-2 rounded-md text-sm font-medium transition-colors block ";
+        if ($target_page === $current_page) {
+            return $base_style . "bg-indigo-800 text-white shadow-inner"; 
+        } else {
+            return $base_style . "text-indigo-100 hover:bg-indigo-500 hover:text-white";
+        }
     }
 }
 ?>
@@ -76,10 +83,11 @@ function navClass($target_page, $current_page) {
                                 class="<?php echo navClass('manage_tests.php', $current_page); ?>">Ujian</a>
                             <a href="manage_question_bank.php"
                                 class="<?php echo navClass('manage_question_bank.php', $current_page); ?>">Bank Soal</a>
-                            <a href="media_manager.php"
-                                class="<?php echo navClass('media_manager.php', $current_page); ?>">Media</a>
                             <a href="reports.php"
                                 class="<?php echo navClass('reports.php', $current_page); ?>">Laporan</a>
+                            <a href="media_manager.php"
+                                class="<?php echo navClass('media_manager.php', $current_page); ?>">Media</a>
+                            
                         </div>
                     </div>
                 </div>
@@ -116,10 +124,10 @@ function navClass($target_page, $current_page) {
                 <a href="manage_question_bank.php"
                     class="<?php echo navClass('manage_question_bank.php', $current_page); ?>"><i
                         class="fas fa-book w-6 text-center"></i> Bank Soal</a>
-                <a href="media_manager.php" class="<?php echo navClass('media_manager.php', $current_page); ?>"><i
-                        class="fas fa-photo-video w-6 text-center"></i> Media</a>
                 <a href="reports.php" class="<?php echo navClass('reports.php', $current_page); ?>"><i
                         class="fas fa-chart-bar w-6 text-center"></i> Laporan</a>
+                <a href="media_manager.php" class="<?php echo navClass('media_manager.php', $current_page); ?>"><i
+                        class="fas fa-photo-video w-6 text-center"></i> Media</a>
             </div>
         </div>
     </nav>

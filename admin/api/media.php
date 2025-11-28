@@ -1,5 +1,5 @@
 <?php
-// admin/api/media.php (STAGE 2: SEARCH, FILTER, RENAME)
+// admin/api/media.php (FINAL HYBRID: SUPPORTS FLAT & HIERARCHY VIEW)
 
 error_reporting(0);
 ini_set('display_errors', 0);
@@ -13,67 +13,102 @@ header('Content-Type: application/json');
 
 $action = $_REQUEST['action'] ?? '';
 
-// --- 1. LIST CONTENT (WITH SEARCH & FILTER) ---
+// --- 1. LIST CONTENT ---
 if ($action == 'list') {
     $folder_id = isset($_GET['folder_id']) ? (int)$_GET['folder_id'] : 0;
     $search = $_GET['search'] ?? '';
-    $type = $_GET['type'] ?? 'all'; // all, image, audio
+    $type = $_GET['type'] ?? 'all'; 
+    $view_mode = $_GET['view_mode'] ?? 'hierarchy'; // 'hierarchy' (folder) atau 'flat' (semua)
     
-    $params_folder = [];
-    $sql_folder = "SELECT * FROM media_folders WHERE parent_id = ?";
-    $params_folder[] = $folder_id;
-
-    $params_file = [];
-    $sql_file = "SELECT * FROM media_files WHERE folder_id = ?";
-    $params_file[] = $folder_id;
-
-    // Logika Search (Jika mencari, abaikan folder_id agar pencarian global)
-    if (!empty($search)) {
-        $sql_folder = "SELECT * FROM media_folders WHERE name LIKE ?";
-        $params_folder = ["%$search%"];
+    // --- QUERY FOLDER ---
+    // Folder hanya diambil jika mode hierarchy ATAU sedang di root (untuk navigasi)
+    // Tapi di mode flat, kita sembunyikan folder agar rapi
+    $folders = [];
+    if ($view_mode === 'hierarchy') {
+        $sql_folder = "SELECT * FROM media_folders WHERE parent_id = ?";
+        $params_folder = [$folder_id];
         
-        $sql_file = "SELECT * FROM media_files WHERE file_name LIKE ?";
-        $params_file = ["%$search%"];
+        if (!empty($search)) {
+            $sql_folder = "SELECT * FROM media_folders WHERE name LIKE ?";
+            $params_folder = ["%$search%"];
+        }
+        $sql_folder .= " ORDER BY name ASC";
+        $folders = db()->all($sql_folder, $params_folder);
     }
 
-    // Logika Filter Tipe
+    // --- QUERY FILE ---
+    $sql_file = "SELECT * FROM media_files";
+    $params_file = [];
+    $where_clauses = [];
+
+    // 1. Logika Flat vs Hierarchy
+    if ($view_mode === 'hierarchy') {
+        $where_clauses[] = "folder_id = ?";
+        $params_file[] = $folder_id;
+    } 
+    // Jika 'flat', kita TIDAK memfilter by folder_id (ambil semua)
+
+    // 2. Logika Search
+    if (!empty($search)) {
+        $where_clauses[] = "file_name LIKE ?";
+        $params_file[] = "%$search%";
+    }
+
+    // 3. Logika Filter Tipe (Image/Audio)
     if ($type !== 'all') {
-        $sql_file .= " AND file_type = ?";
+        $where_clauses[] = "file_type = ?";
         $params_file[] = $type;
     }
 
-    $sql_folder .= " ORDER BY name ASC";
-    $sql_file .= " ORDER BY created_at DESC";
+    // Gabungkan Where Clauses
+    if (!empty($where_clauses)) {
+        $sql_file .= " WHERE " . implode(" AND ", $where_clauses);
+    }
 
-    $folders = (!empty($search) || $type === 'all') ? db()->all($sql_folder, $params_folder) : []; // Hide folder jika filter tipe aktif
+    $sql_file .= " ORDER BY created_at DESC";
+    
+    // Limitasi di mode Flat agar tidak berat (opsional, misal 100 terakhir)
+    if ($view_mode === 'flat' && empty($search)) {
+        $sql_file .= " LIMIT 200"; // Ambil 200 gambar terbaru saja agar cepat
+    }
+
     $files = db()->all($sql_file, $params_file);
     
-    // Breadcrumb (Hanya jika tidak sedang search)
+    // Breadcrumb
     $breadcrumbs = [];
-    if (empty($search)) {
-        $temp_id = $folder_id;
-        while($temp_id > 0) {
-            $parent = db()->single("SELECT id, name, parent_id FROM media_folders WHERE id = ?", [$temp_id]);
-            if($parent) {
-                array_unshift($breadcrumbs, $parent);
-                $temp_id = $parent['parent_id'];
-            } else break;
-        }
-        array_unshift($breadcrumbs, ['id' => 0, 'name' => 'Home']);
+    if ($view_mode === 'flat') {
+        $breadcrumbs[] = ['id' => 0, 'name' => 'Semua File (Terbaru)'];
     } else {
-        $breadcrumbs[] = ['id' => 0, 'name' => 'Hasil Pencarian: "' . htmlspecialchars($search) . '"'];
+        if (empty($search)) {
+            $temp_id = $folder_id;
+            while($temp_id > 0) {
+                $parent = db()->single("SELECT id, name, parent_id FROM media_folders WHERE id = ?", [$temp_id]);
+                if($parent) {
+                    array_unshift($breadcrumbs, $parent);
+                    $temp_id = $parent['parent_id'];
+                } else break;
+            }
+            array_unshift($breadcrumbs, ['id' => 0, 'name' => 'Root Folder']);
+        } else {
+            $breadcrumbs[] = ['id' => 0, 'name' => 'Hasil Pencarian'];
+        }
     }
 
     echo json_encode([
         'status' => 'success',
         'folders' => $folders,
         'files' => $files,
-        'breadcrumbs' => $breadcrumbs
+        'breadcrumbs' => $breadcrumbs,
+        'view_mode' => $view_mode
     ]);
     exit;
 }
 
-// --- 2. RENAME ITEM (BARU) ---
+// ... (Bagian Rename, Create, Upload, Delete, Move TETAP SAMA seperti sebelumnya) ...
+// Sertakan sisa kode dari file media.php versi terakhir Anda di sini 
+// (create_folder, upload_file, delete_item, rename_item, move_item)
+
+// --- 2. RENAME ITEM ---
 if ($action == 'rename_item') {
     $id = $_POST['id'];
     $type = $_POST['type'];
@@ -87,34 +122,32 @@ if ($action == 'rename_item') {
     if ($type == 'folder') {
         db()->query("UPDATE media_folders SET name = ? WHERE id = ?", [$new_name, $id]);
     } else {
-        // Cek ekstensi asli agar tidak hilang
         $old = db()->single("SELECT file_name FROM media_files WHERE id = ?", [$id]);
         $ext = pathinfo($old['file_name'], PATHINFO_EXTENSION);
-        
-        // Jika user tidak menulis ekstensi, tambahkan otomatis
         if (pathinfo($new_name, PATHINFO_EXTENSION) !== $ext) {
             $new_name .= '.' . $ext;
         }
-        
         db()->query("UPDATE media_files SET file_name = ? WHERE id = ?", [$new_name, $id]);
     }
     echo json_encode(['status' => 'success']);
     exit;
 }
 
-// --- 3. CREATE FOLDER (SAMA) ---
+// --- 3. CREATE FOLDER ---
 if ($action == 'create_folder') {
     $name = trim($_POST['name']);
     $parent_id = (int)$_POST['parent_id'];
     if (empty($name)) { echo json_encode(['status' => 'error', 'message' => 'Nama wajib diisi']); exit; }
+    
     if (db()->single("SELECT id FROM media_folders WHERE name = ? AND parent_id = ?", [$name, $parent_id])) {
         echo json_encode(['status' => 'error', 'message' => 'Nama folder sudah ada']); exit;
     }
+    
     db()->query("INSERT INTO media_folders (name, parent_id) VALUES (?, ?)", [$name, $parent_id]);
     echo json_encode(['status' => 'success']); exit;
 }
 
-// --- 4. UPLOAD FILE (SAMA) ---
+// --- 4. UPLOAD FILE ---
 if ($action == 'upload_file') {
     if (!isset($_FILES['file']) || $_FILES['file']['error'] != 0) { echo json_encode(['status' => 'error', 'message' => 'Gagal upload']); exit; }
     $folder_id = (int)$_POST['folder_id']; $file = $_FILES['file'];
@@ -136,7 +169,7 @@ if ($action == 'upload_file') {
     exit;
 }
 
-// --- 5. DELETE ITEM (SAMA) ---
+// --- 5. DELETE ITEM ---
 if ($action == 'delete_item') {
     $id = $_POST['id']; $type = $_POST['type'];
     if ($type == 'folder') {
@@ -155,18 +188,14 @@ if ($action == 'delete_item') {
     echo json_encode(['status' => 'success']); exit;
 }
 
-// ... (Kode create, upload, delete sebelumnya tetap sama) ...
-
-// --- 6. MOVE ITEM (PINDAH FOLDER) ---
+// --- 6. MOVE ITEM ---
 if ($action == 'move_item') {
     $id = $_POST['id'];
-    $type = $_POST['type']; // 'file' atau 'folder'
+    $type = $_POST['type']; 
     $target_folder = $_POST['target_folder'];
 
-    // Validasi sederhana agar folder tidak dipindah ke dirinya sendiri
     if ($type == 'folder' && $id == $target_folder) {
-        echo json_encode(['status' => 'error', 'message' => 'Tidak bisa memindahkan folder ke dirinya sendiri']);
-        exit;
+        echo json_encode(['status' => 'error', 'message' => 'Tidak valid']); exit;
     }
 
     if ($type == 'file') {
@@ -175,11 +204,8 @@ if ($action == 'move_item') {
         db()->query("UPDATE media_folders SET parent_id = ? WHERE id = ?", [$target_folder, $id]);
     }
     
-    echo json_encode(['status' => 'success']);
-    exit;
+    echo json_encode(['status' => 'success']); exit;
 }
 
-// Baris terakhir file:
 echo json_encode(['status' => 'error', 'message' => 'Invalid Request']);
-?>
 ?>

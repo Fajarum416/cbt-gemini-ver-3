@@ -1,4 +1,4 @@
-// admin/js/manage_tests.js (FINAL FIX: SECTION CHECKBOX & REMOVE ERROR)
+// admin/js/manage_tests.js (FINAL REVISED: LOCAL TIMEZONE FIX)
 
 let currentStep = 1
 let wizardData = { details: {}, questions: [], assigned_classes: [] }
@@ -107,7 +107,6 @@ window.closeWizard = function () {
 }
 
 window.navigateWizard = function (dir, toStep = null) {
-  // Validasi Step 2
   if (currentStep === 2 && dir === 1) {
     if (wizardData.questions.length === 0) {
       alert('Pilih minimal 1 soal sebelum lanjut!')
@@ -116,8 +115,6 @@ window.navigateWizard = function (dir, toStep = null) {
   }
 
   currentStep = toStep ? toStep : currentStep + dir
-
-  // UI Update
   ;[1, 2, 3, 4].forEach(s => {
     const stepEl = document.getElementById(`step${s}`)
     const ind = document.getElementById(`prog-${s}`)
@@ -168,6 +165,8 @@ function populateForms() {
   document.getElementById('retake_mode').value = d.retake_mode
   document.getElementById('passing_grade').value = d.passing_grade
   document.getElementById('scoring_method').value = d.scoring_method
+
+  // Flatpickr akan menangani format ISO dari server
   fpInstance = flatpickr('#availability_range', {
     mode: 'range',
     enableTime: true,
@@ -176,14 +175,11 @@ function populateForms() {
     defaultDate: [d.availability_start, d.availability_end],
   })
 
-  // Cek apakah data lama punya sesi
   const hasSection = wizardData.questions.some(q => q.section_name)
   document.getElementById('section_mode_toggle').checked = hasSection
   window.toggleSectionMode()
 
-  // Update Preview di Step 2
   updateSelectedPreview()
-
   window.togglePointInput()
   window.updateTotalPoints()
   const classes = wizardData.assigned_classes.map(String)
@@ -193,11 +189,9 @@ function populateForms() {
 // --- STEP 2: BANK SOAL ---
 
 function setupStep2() {
-  // Init Search Bank Listeners
   const bSearch = document.getElementById('bankSearch')
   const bFilter = document.getElementById('bankPackageFilter')
 
-  // Clone to remove old listeners
   const newBSearch = bSearch.cloneNode(true)
   bSearch.parentNode.replaceChild(newBSearch, bSearch)
   const newBFilter = bFilter.cloneNode(true)
@@ -371,9 +365,7 @@ function renderAssembled(q) {
             <span class="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border border-indigo-200">${sectionName}</span>
         </div>
         <div class="flex items-center w-full">
-            
             <input type="checkbox" class="select-q-check w-4 h-4 text-indigo-600 rounded mr-2 cursor-pointer">
-            
             <div class="drag-handle cursor-grab active:cursor-grabbing p-2 mr-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-100 rounded shrink-0"><i class="fas fa-grip-vertical"></i></div>
             <div class="flex flex-col mr-2 gap-1 shrink-0">
                 <button type="button" onclick="window.moveQuestionUp(this)" class="text-[10px] text-gray-400 hover:text-indigo-600 leading-none"><i class="fas fa-chevron-up"></i></button>
@@ -396,19 +388,16 @@ function renderAssembled(q) {
     </div>`
 }
 
-// FUNGSI BARU: Toggle Check All di Step 3
 window.toggleCheckAll = function (source) {
   document.querySelectorAll('.select-q-check').forEach(cb => (cb.checked = source.checked))
 }
 
-// FUNGSI BARU: Hapus Soal Terpilih (Yang dicentang di Step 3)
 window.removeSelectedQuestions = function () {
   const checks = document.querySelectorAll('.select-q-check:checked')
   if (checks.length === 0) {
     alert('Pilih soal yang mau dihapus dulu!')
     return
   }
-
   if (confirm(`Hapus ${checks.length} soal terpilih?`)) {
     checks.forEach(cb => {
       cb.closest('.question-item').remove()
@@ -419,45 +408,32 @@ window.removeSelectedQuestions = function () {
   }
 }
 
-// FUNGSI BARU: Terapkan Sesi ke Soal Terpilih
 window.applySectionToSelected = function () {
   const checks = document.querySelectorAll('.select-q-check:checked')
   if (checks.length === 0) {
     alert('Pilih soal dulu!')
     return
   }
-
   const secName = document.getElementById('current_section_select').value
-  if (secName === 'custom') return // Jangan proses jika user sedang input custom
-
-  // Update DOM
+  if (secName === 'custom') return
   checks.forEach(cb => {
     const item = cb.closest('.question-item')
-    // Jika secName kosong, dataset akan jadi kosong (menghapus sesi)
     item.dataset.section = secName
   })
-
-  // Save to Memory & Re-render
   saveOrderFromDOM()
-  setupStep3() // Refresh UI agar badge update
-
-  // Notifikasi Cerdas
+  setupStep3()
   const msg = secName
     ? `${checks.length} soal masuk sesi: ${secName}`
     : `${checks.length} soal sesi dihapus`
   if (window.showNotification) window.showNotification(msg, secName ? 'success' : 'info')
-
-  // Uncheck all after action
   document.getElementById('checkAllQuestions').checked = false
 }
 
 window.applySectionToAll = function () {
   const secName = document.getElementById('current_section_select').value
   if (secName === 'custom') return
-
   wizardData.questions.forEach(q => (q.section_name = secName))
   setupStep3()
-
   const msg = secName ? `Semua soal masuk sesi: ${secName}` : `Semua sesi dihapus`
   if (window.showNotification) window.showNotification(msg, secName ? 'success' : 'info')
 }
@@ -466,15 +442,11 @@ window.saveOrderFromDOM = function () {
   const items = document.querySelectorAll('.question-item')
   const newQuestions = []
   items.forEach((el, idx) => {
-    const id = el.dataset.id
-    const text = el.dataset.text
-    const section = el.dataset.section || null
-    const points = el.querySelector('.q-points').value
     newQuestions.push({
-      id: id,
-      question_text: text,
-      points: points,
-      section_name: section,
+      id: el.dataset.id,
+      question_text: el.dataset.text,
+      points: el.querySelector('.q-points').value,
+      section_name: el.dataset.section || null,
       order: idx + 1,
     })
   })
@@ -504,12 +476,9 @@ function highlightItem(item) {
   setTimeout(() => item.classList.remove('ring-2', 'ring-indigo-300', 'bg-indigo-50'), 400)
 }
 
-// --- TOGGLES ---
-
 window.toggleSectionMode = function () {
   const isChecked = document.getElementById('section_mode_toggle').checked
   const controls = document.getElementById('section_controls')
-
   if (isChecked) {
     controls.classList.remove('hidden')
     const listEl = document.getElementById('sortable-list')
@@ -517,7 +486,6 @@ window.toggleSectionMode = function () {
       listEl.innerHTML = wizardData.questions.map(q => renderAssembled(q)).join('')
   } else {
     controls.classList.add('hidden')
-    // Clear section data in memory? Optional. Currently keeps data but hides UI.
     const listEl = document.getElementById('sortable-list')
     if (listEl && wizardData.questions.length > 0)
       listEl.innerHTML = wizardData.questions.map(q => renderAssembled(q)).join('')
@@ -568,7 +536,6 @@ window.updateTotalPoints = function () {
   const inputs = document.querySelectorAll('.q-points')
   const countEl = document.getElementById('total_q_count')
   if (countEl) countEl.innerText = inputs.length
-
   if (document.getElementById('scoring_method').value === 'percentage') {
     document.getElementById('total_points_display').innerText = '100 (Oto)'
     return
@@ -576,6 +543,24 @@ window.updateTotalPoints = function () {
   let total = 0
   inputs.forEach(i => (total += parseFloat(i.value) || 0))
   document.getElementById('total_points_display').innerText = total.toFixed(1)
+}
+
+// --- HELPER TIMEZONE LOKAL (PENTING) ---
+function toLocalISOString(date) {
+  const pad = n => n.toString().padStart(2, '0')
+  return (
+    date.getFullYear() +
+    '-' +
+    pad(date.getMonth() + 1) +
+    '-' +
+    pad(date.getDate()) +
+    ' ' +
+    pad(date.getHours()) +
+    ':' +
+    pad(date.getMinutes()) +
+    ':' +
+    pad(date.getSeconds())
+  )
 }
 
 // --- FINAL SAVE ---
@@ -593,8 +578,10 @@ function saveWizard() {
   d.scoring_method = document.getElementById('scoring_method').value
 
   const dates = fpInstance.selectedDates
-  d.availability_start = dates[0] ? dates[0].toISOString().slice(0, 19).replace('T', ' ') : null
-  d.availability_end = dates[1] ? dates[1].toISOString().slice(0, 19).replace('T', ' ') : null
+
+  // PERBAIKAN: Gunakan format lokal, BUKAN .toISOString() (UTC)
+  d.availability_start = dates[0] ? toLocalISOString(dates[0]) : null
+  d.availability_end = dates[1] ? toLocalISOString(dates[1]) : null
 
   wizardData.assigned_classes = Array.from(
     document.querySelectorAll('.class-checkbox:checked'),
@@ -629,7 +616,7 @@ function fetchTests(page = 1) {
   testsCurrentPage = page
   const s = document.getElementById('searchInput').value
   const c = document.getElementById('categoryFilter').value
-  const container = document.getElementById('tests-container') // TARGET BARU
+  const container = document.getElementById('tests-container')
 
   container.innerHTML =
     '<div class="col-span-full text-center p-10 text-gray-500"><i class="fas fa-spinner fa-spin fa-2x mb-3"></i><br>Memuat daftar ujian...</div>'
@@ -640,17 +627,8 @@ function fetchTests(page = 1) {
       if (d.tests.length) {
         let html = ''
         d.tests.forEach(t => {
-          // Helper untuk format tanggal & remedial
           const startDate = t.availability_start
             ? new Date(t.availability_start).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-            : '-'
-          const endDate = t.availability_end
-            ? new Date(t.availability_end).toLocaleDateString('id-ID', {
                 day: 'numeric',
                 month: 'short',
                 hour: '2-digit',
@@ -680,11 +658,8 @@ function fetchTests(page = 1) {
                                   t.category
                                 }</span>
                             </div>
-                            <div class="shrink-0">
-                                ${retakeBadge}
-                            </div>
+                            <div class="shrink-0">${retakeBadge}</div>
                         </div>
-
                         <div class="p-5 grid grid-cols-2 gap-4 text-sm flex-grow">
                             <div class="flex items-center gap-2 text-gray-600" title="Total Poin">
                                 <div class="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600"><i class="fas fa-star"></i></div>
@@ -700,18 +675,13 @@ function fetchTests(page = 1) {
                                 </div>
                             </div>
                         </div>
-
                         <div class="p-3 bg-gray-50 border-t border-gray-100 grid grid-cols-2 gap-2">
                             <button onclick="openWizard('edit',${
                               t.id
-                            })" class="flex items-center justify-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 text-gray-600 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-                                <i class="fas fa-edit"></i> Edit
-                            </button>
+                            })" class="flex items-center justify-center gap-2 bg-white border border-gray-200 hover:border-blue-300 hover:text-blue-600 text-gray-600 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"><i class="fas fa-edit"></i> Edit</button>
                             <button onclick="openDeleteModal(${
                               t.id
-                            })" class="flex items-center justify-center gap-2 bg-white border border-gray-200 hover:border-red-300 hover:text-red-600 text-gray-600 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
-                                <i class="fas fa-trash"></i> Hapus
-                            </button>
+                            })" class="flex items-center justify-center gap-2 bg-white border border-gray-200 hover:border-red-300 hover:text-red-600 text-gray-600 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"><i class="fas fa-trash"></i> Hapus</button>
                         </div>
                     </div>`
         })

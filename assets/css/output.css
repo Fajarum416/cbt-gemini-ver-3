@@ -741,6 +741,11 @@ video {
   margin-bottom: 0.5rem;
 }
 
+.my-1 {
+  margin-top: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+
 .-mr-2 {
   margin-right: -0.5rem;
 }
@@ -991,6 +996,10 @@ video {
 
 .w-full {
   width: 100%;
+}
+
+.w-px {
+  width: 1px;
 }
 
 .min-w-0 {

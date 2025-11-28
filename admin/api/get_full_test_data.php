@@ -1,5 +1,5 @@
 <?php
-// admin/api/get_full_test_data.php
+// admin/api/get_full_test_data.php (FINAL FIX: DATE FORMAT)
 error_reporting(0);
 ini_set('display_errors', 0);
 ob_start();
@@ -26,12 +26,12 @@ $response = [
 $details = db()->single("SELECT * FROM tests WHERE id = ?", [$test_id]);
 
 if ($details) {
-    // Format tanggal agar pas dengan input HTML datetime-local
+    // PERBAIKAN: Format harus Y-m-d\TH:i agar terbaca oleh input type="datetime-local"
     if (!empty($details['availability_start'])) {
-        $details['availability_start'] = date('Y-m-d H:i', strtotime($details['availability_start']));
+        $details['availability_start'] = date('Y-m-d\TH:i', strtotime($details['availability_start']));
     }
     if (!empty($details['availability_end'])) {
-        $details['availability_end'] = date('Y-m-d H:i', strtotime($details['availability_end']));
+        $details['availability_end'] = date('Y-m-d\TH:i', strtotime($details['availability_end']));
     }
     $response['details'] = $details;
 } else {
@@ -40,7 +40,6 @@ if ($details) {
 }
 
 // 2. Ambil Soal
-// PERBAIKAN: Tambahkan tq.section_name
 $sql_q = "SELECT q.id, q.question_text, tq.points, tq.section_name 
           FROM questions q 
           JOIN test_questions tq ON q.id = tq.question_id 

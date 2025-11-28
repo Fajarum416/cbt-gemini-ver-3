@@ -1,25 +1,17 @@
 <?php
-// admin/api/process_test_wizard.php
+// admin/api/process_test_wizard.php (FINAL FIX: DATE NULL HANDLING)
 
-// 1. Matikan tampilan error ke layar (agar tidak merusak JSON)
 error_reporting(0); 
 ini_set('display_errors', 0);
-
-// 2. Tangkap output apapun yang tidak sengaja muncul
 ob_start();
 
-// 3. Gunakan Absolute Path agar tidak pernah salah alamat
 require_once dirname(dirname(__DIR__)) . '/includes/functions.php';
-
 checkAccess('admin');
 
-// 4. Bersihkan semua output liar sebelum mengirim header JSON
 ob_end_clean();
-
 header('Content-Type: application/json');
 
 try {
-    // Baca Input JSON
     $inputJSON = file_get_contents('php://input');
     $input = json_decode($inputJSON, true);
 
@@ -32,8 +24,10 @@ try {
     $classes = $input['assigned_classes'] ?? [];
     $id = $d['test_id'] ?? 0;
 
-    $start = !empty($d['availability_start']) ? $d['availability_start'] : null;
-    $end = !empty($d['availability_end']) ? $d['availability_end'] : null;
+    // --- FIX LOGIC DATE ---
+    // Jika kosong string (""), ubah jadi NULL agar MySQL tidak error
+    $start = (!empty($d['availability_start']) && $d['availability_start'] !== '') ? $d['availability_start'] : null;
+    $end = (!empty($d['availability_end']) && $d['availability_end'] !== '') ? $d['availability_end'] : null;
 
     $conn = db()->conn;
     $conn->begin_transaction();
@@ -55,16 +49,12 @@ try {
     // 2. Insert Soal
     db()->query("DELETE FROM test_questions WHERE test_id = ?", [$id]);
     if (!empty($qs)) {
-        // PERBAIKAN: Menambahkan kolom section_name
         $sql_q = "INSERT INTO test_questions (test_id, question_id, question_order, points, section_name) VALUES ";
         $vals = [];
         foreach ($qs as $idx => $q) {
-            // Ambil section_name dari input, default NULL jika tidak ada
             $sec = isset($q['section_name']) && !empty($q['section_name']) ? "'" . db()->conn->real_escape_string($q['section_name']) . "'" : "NULL";
-            
             $vals[] = "($id, " . (int)$q['id'] . ", " . ($idx + 1) . ", " . (float)$q['points'] . ", $sec)";
         }
-        // Eksekusi raw query
         if (!$conn->query($sql_q . implode(', ', $vals))) {
             throw new Exception("Gagal menyimpan soal: " . $conn->error);
         }

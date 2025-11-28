@@ -17,7 +17,10 @@ $recent_activity = db()->all("SELECT tr.score, tr.end_time, u.username, t.title,
 ?>
 
 <div class="mb-6 md:mb-8">
-    <h1 class="text-xl md:text-3xl font-bold text-gray-800">Selamat Datang, Admin!</h1>
+    <h1 class="text-xl md:text-3xl font-bold text-gray-800">
+    Selamat Datang, <?php echo htmlspecialchars($username); ?>!
+</h1>
+
     <p class="text-sm md:text-base text-gray-600 mt-1">Ringkasan aktivitas & pemantauan ujian.</p>
 </div>
 
