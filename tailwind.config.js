@@ -6,8 +6,9 @@ module.exports = {
     // 2. Scan folder src (DALAM)
     './src/**/*.{html,js,php}',
 
-    // 3. Scan folder admin (DALAM), tapi HATI-HATI
+    // 3. Scan folder admin dan student (DALAM), tapi HATI-HATI
     './admin/**/*.{html,js,php}',
+    './student/**/*.{html,js,php}',
 
     // --- BAGIAN PENTING: EXCLUDE (ABAIKAN) ---
     // Abaikan node_modules di manapun berada

@@ -29,19 +29,23 @@ try {
     $start = (!empty($d['availability_start']) && $d['availability_start'] !== '') ? $d['availability_start'] : null;
     $end = (!empty($d['availability_end']) && $d['availability_end'] !== '') ? $d['availability_end'] : null;
 
+    $allow_review = isset($d['allow_review']) ? (int)$d['allow_review'] : 0;
+
     $conn = db()->conn;
     $conn->begin_transaction();
 
     // 1. Insert/Update Tabel Tests
     if ($id > 0) {
+        // BARU: Tambahkan allow_review=? di query UPDATE
         db()->query(
-            "UPDATE tests SET title=?, category=?, description=?, duration=?, availability_start=?, availability_end=?, passing_grade=?, retake_mode=?, scoring_method=? WHERE id=?", 
-            [$d['title'], $d['category'], $d['description'], $d['duration'], $start, $end, $d['passing_grade'], $d['retake_mode'], $d['scoring_method'], $id]
+            "UPDATE tests SET title=?, category=?, description=?, duration=?, availability_start=?, availability_end=?, passing_grade=?, retake_mode=?, scoring_method=?, allow_review=? WHERE id=?", 
+            [$d['title'], $d['category'], $d['description'], $d['duration'], $start, $end, $d['passing_grade'], $d['retake_mode'], $d['scoring_method'], $allow_review, $id]
         );
     } else {
+        // BARU: Tambahkan kolom allow_review di query INSERT
         db()->query(
-            "INSERT INTO tests (title, category, description, duration, availability_start, availability_end, passing_grade, retake_mode, scoring_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [$d['title'], $d['category'], $d['description'], $d['duration'], $start, $end, $d['passing_grade'], $d['retake_mode'], $d['scoring_method']]
+            "INSERT INTO tests (title, category, description, duration, availability_start, availability_end, passing_grade, retake_mode, scoring_method, allow_review) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [$d['title'], $d['category'], $d['description'], $d['duration'], $start, $end, $d['passing_grade'], $d['retake_mode'], $d['scoring_method'], $allow_review]
         );
         $id = db()->lastInsertId();
     }

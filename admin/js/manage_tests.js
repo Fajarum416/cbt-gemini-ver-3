@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('searchInput').addEventListener('keyup', () => fetchTests(1))
   document.getElementById('categoryFilter').addEventListener('change', () => fetchTests(1))
 
-  document.getElementById('saveBtn').addEventListener('click', saveWizard)
+  // document.getElementById('saveBtn').addEventListener('click', saveWizard)
   document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDeleteAction)
 
   // Listener Custom Session
@@ -151,6 +151,7 @@ function resetForms() {
     '<div class="text-center p-4 italic opacity-50">Belum ada soal dipilih</div>'
   document.getElementById('bulk_points').value = ''
   document.querySelectorAll('.class-checkbox').forEach(c => (c.checked = false))
+  document.getElementById('allow_review').checked = false
   wizardData.questions = []
   window.toggleSectionMode()
   window.updateTotalPoints()
@@ -165,6 +166,7 @@ function populateForms() {
   document.getElementById('retake_mode').value = d.retake_mode
   document.getElementById('passing_grade').value = d.passing_grade
   document.getElementById('scoring_method').value = d.scoring_method
+  document.getElementById('allow_review').checked = d.allow_review == 1
 
   // Flatpickr akan menangani format ISO dari server
   fpInstance = flatpickr('#availability_range', {
@@ -576,6 +578,7 @@ function saveWizard() {
   d.retake_mode = document.getElementById('retake_mode').value
   d.passing_grade = document.getElementById('passing_grade').value
   d.scoring_method = document.getElementById('scoring_method').value
+  d.allow_review = document.getElementById('allow_review').checked ? 1 : 0
 
   const dates = fpInstance.selectedDates
 

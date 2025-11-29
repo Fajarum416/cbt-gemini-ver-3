@@ -1,131 +1,52 @@
 <?php
-// student/index.php (REVISI UI)
-$page_title = 'Dashboard Siswa';
+// student/index.php
 require_once 'header.php';
-
-// LOGIKA TETAP SAMA
-try {
-    $class_member = db()->single("SELECT class_id FROM class_members WHERE student_id = ?", [$user_id]);
-    
-    if (!$class_member) {
-        logAction('no_class_assigned', 'Student has no class assignment');
-        throw new Exception("Akun belum aktif. Silakan hubungi Admin atau Guru.");
-    }
-
-    $class_id = $class_member['class_id'];
-
-    $sql = "SELECT t.id, t.title, t.description, t.duration, t.availability_end, 
-                   tr.status AS status_pengerjaan, tr.score, tr.id as result_id,
-                   COUNT(tq.id) as question_count
-            FROM tests t
-            JOIN test_assignments ta ON t.id = ta.test_id
-            LEFT JOIN test_results tr ON t.id = tr.test_id AND tr.student_id = ?
-            LEFT JOIN test_questions tq ON t.id = tq.test_id
-            WHERE ta.class_id = ? 
-            AND t.availability_start <= NOW() 
-            AND t.availability_end >= NOW()
-            GROUP BY t.id, tr.status, tr.score, tr.id
-            ORDER BY t.availability_end ASC";
-
-    $tests = db()->all($sql, [$user_id, $class_id]);
-
-} catch (Exception $e) {
-    $error_message = $e->getMessage();
-}
 ?>
 
-<div class="mb-8 fade-enter">
-    <h1 class="text-2xl font-bold text-slate-900">Ujian Tersedia</h1>
-    <p class="text-slate-500 mt-1">Daftar ujian yang aktif dan dapat Anda kerjakan.</p>
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">Daftar Ujian</h1>
+        <p class="text-gray-500 text-sm mt-1">Pilih ujian yang tersedia untuk dikerjakan hari ini.</p>
+    </div>
+    
+    <div class="w-full md:w-auto">
+        <div class="relative group">
+            <i class="fas fa-search absolute left-3 top-3 text-gray-400 group-focus-within:text-indigo-500 transition-colors"></i>
+            <input type="text" id="searchTest" placeholder="Cari judul ujian..." 
+                class="w-full md:w-64 pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm transition-all shadow-sm">
+        </div>
+    </div>
 </div>
 
-<?php if (isset($error_message)): ?>
-    <div class="p-4 mb-6 bg-red-50 border-l-4 border-red-500 text-red-700 rounded-r shadow-sm">
-        <div class="flex items-center">
-            <i class="fas fa-exclamation-triangle mr-3"></i>
-            <span class="font-medium"><?php echo htmlspecialchars($error_message); ?></span>
-        </div>
-    </div>
-<?php endif; ?>
+<div class="mb-6 flex gap-2 overflow-x-auto pb-2">
+    <button onclick="filterTests('all')" data-type="all" class="filter-btn px-4 py-2 rounded-lg text-xs font-bold bg-indigo-600 text-white shadow-sm border border-indigo-600 transition-colors whitespace-nowrap">
+        Semua
+    </button>
+    <button onclick="filterTests('available')" data-type="available" class="filter-btn px-4 py-2 rounded-lg text-xs font-bold bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors whitespace-nowrap">
+        <i class="fas fa-play-circle mr-1 text-green-500"></i> Tersedia
+    </button>
+    <button onclick="filterTests('history')" data-type="history" class="filter-btn px-4 py-2 rounded-lg text-xs font-bold bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors whitespace-nowrap">
+        <i class="fas fa-history mr-1 text-gray-400"></i> Riwayat
+    </button>
+</div>
 
-<?php if (empty($tests)): ?>
-    <div class="bg-white border border-slate-200 rounded-xl p-12 text-center shadow-sm fade-enter">
-        <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-            <i class="fas fa-calendar-check text-2xl"></i>
-        </div>
-        <h3 class="text-lg font-bold text-slate-800">Tidak Ada Ujian Aktif</h3>
-        <p class="text-slate-500 mt-2">Saat ini belum ada jadwal ujian untuk kelas Anda.</p>
-    </div>
-<?php else: ?>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 fade-enter">
-        <?php foreach ($tests as $test): ?>
-            <?php
-                // Logika Status untuk UI
-                $status = $test['status_pengerjaan'];
-                $is_completed = $status === 'completed';
-                $is_progress = $status === 'in_progress';
-                
-                // Styling Card berdasarkan status
-                $card_border = $is_progress ? 'border-amber-400 ring-1 ring-amber-400' : 'border-slate-200';
-            ?>
-            
-            <div class="bg-white rounded-xl border <?php echo $card_border; ?> shadow-sm hover:shadow-md transition-all duration-300 flex flex-col h-full relative overflow-hidden group">
-                
-                <?php if ($is_progress): ?>
-                    <div class="absolute top-0 right-0 bg-amber-100 text-amber-800 text-xs font-bold px-3 py-1 rounded-bl-lg border-b border-l border-amber-200">
-                        <i class="fas fa-spinner fa-spin mr-1"></i> Sedang Jalan
-                    </div>
-                <?php elseif ($is_completed): ?>
-                    <div class="absolute top-0 right-0 bg-emerald-100 text-emerald-800 text-xs font-bold px-3 py-1 rounded-bl-lg border-b border-l border-emerald-200">
-                        <i class="fas fa-check mr-1"></i> Selesai
-                    </div>
-                <?php endif; ?>
-
-                <div class="p-6 flex-grow">
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-1 rounded">
-                            <i class="far fa-clock mr-1"></i> <?php echo $test['duration']; ?> Menit
-                        </span>
-                        <span class="bg-slate-100 text-slate-600 text-xs font-semibold px-2 py-1 rounded">
-                            <i class="far fa-file-alt mr-1"></i> <?php echo $test['question_count']; ?> Soal
-                        </span>
-                    </div>
-
-                    <h3 class="font-bold text-lg text-slate-900 mb-2 leading-tight group-hover:text-indigo-600 transition-colors">
-                        <?php echo htmlspecialchars($test['title']); ?>
-                    </h3>
-                    
-                    <p class="text-slate-500 text-sm mb-4 line-clamp-2 leading-relaxed">
-                        <?php echo htmlspecialchars($test['description'] ?: 'Tidak ada deskripsi tambahan.'); ?>
-                    </p>
-                    
-                    <div class="mt-auto text-xs text-slate-400 font-medium pt-2 border-t border-slate-50">
-                        <i class="fas fa-stopwatch mr-1 text-rose-400"></i>
-                        Batas: <?php echo date('d M Y, H:i', strtotime($test['availability_end'])); ?>
-                    </div>
-                </div>
-                
-                <div class="p-4 bg-slate-50 border-t border-slate-100">
-                    <?php if ($is_completed): ?>
-                        <a href="result_page.php?result_id=<?php echo $test['result_id']; ?>" 
-                           class="block w-full text-center py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-colors shadow-sm">
-                            <i class="fas fa-chart-bar mr-2"></i> Lihat Hasil
-                        </a>
-                    <?php elseif ($is_progress): ?>
-                        <a href="test_page.php?test_id=<?php echo $test['id']; ?>" 
-                           class="block w-full text-center py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors shadow-sm">
-                            <i class="fas fa-play mr-2"></i> Lanjutkan
-                        </a>
-                    <?php else: ?>
-                        <a href="confirm_page.php?test_id=<?php echo $test['id']; ?>" 
-                           class="block w-full text-center py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm transition-colors shadow-sm hover:shadow-indigo-200">
-                            Mulai Ujian <i class="fas fa-arrow-right ml-2"></i>
-                        </a>
-                    <?php endif; ?>
-                </div>
+<div id="test-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 h-64 animate-pulse">
+        <div class="flex gap-3 mb-4">
+            <div class="w-12 h-12 bg-gray-200 rounded-xl"></div>
+            <div class="flex-1 space-y-2 py-1">
+                <div class="h-4 bg-gray-200 rounded w-1/3"></div>
+                <div class="h-4 bg-gray-200 rounded w-3/4"></div>
             </div>
-        <?php endforeach; ?>
+        </div>
+        <div class="space-y-2 mb-6">
+            <div class="h-3 bg-gray-200 rounded"></div>
+            <div class="h-3 bg-gray-200 rounded w-5/6"></div>
+        </div>
+        <div class="h-10 bg-gray-200 rounded mt-auto"></div>
     </div>
-<?php endif; ?>
+</div>
+
+<script src="js/dashboard.js"></script>
 
 <?php require_once 'footer.php'; ?>

@@ -1,5 +1,5 @@
 <?php
-// admin/manage_tests.php (REVISED: SECURE OUTPUT)
+// admin/manage_tests.php (FINAL UI: ADDED REVIEW TOGGLE)
 $page_title = 'Manajemen Ujian';
 require_once 'header.php';
 
@@ -61,7 +61,10 @@ $classes = db()->all("SELECT id, class_name FROM classes ORDER BY class_name ASC
             <div id="step1" class="wizard-step max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-sm border">
                 <input type="hidden" id="testId">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                    <div class="col-span-1 md:col-span-2"><label class="block text-sm font-semibold text-gray-700 mb-1">Judul Ujian</label><input type="text" id="title" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" placeholder="Misal: UAS Matematika"></div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Judul Ujian</label>
+                        <input type="text" id="title" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" placeholder="Misal: UAS Matematika">
+                    </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1">Kategori</label>
                         <input type="text" id="category" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" list="catList" placeholder="Ketik/Pilih...">
@@ -69,10 +72,37 @@ $classes = db()->all("SELECT id, class_name FROM classes ORDER BY class_name ASC
                             <?php foreach($categories as $c) echo "<option value='" . htmlspecialchars($c['category'], ENT_QUOTES) . "'>"; ?>
                         </datalist>
                     </div>
-                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Durasi (Menit)</label><input type="number" id="duration" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" value="60"></div>
-                    <div class="col-span-1 md:col-span-2"><label class="block text-sm font-semibold text-gray-700 mb-1">Deskripsi</label><textarea id="description" rows="2" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea></div>
-                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Mode Remedial</label><select id="retake_mode" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm"><option value="0">Sekali Kerjakan (Formal)</option><option value="1">Perlu Persetujuan (Remedial)</option><option value="2">Bebas Mengulang (Latihan)</option></select></div>
-                    <div><label class="block text-sm font-semibold text-gray-700 mb-1">Jadwal Ketersediaan</label><input type="text" id="availability_range" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm" placeholder="Pilih rentang waktu..."></div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Durasi (Menit)</label>
+                        <input type="number" id="duration" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm" value="60">
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Deskripsi</label>
+                        <textarea id="description" rows="2" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Mode Remedial</label>
+                        <select id="retake_mode" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm">
+                            <option value="0">Sekali Kerjakan (Formal)</option>
+                            <option value="1">Perlu Persetujuan (Remedial)</option>
+                            <option value="2">Bebas Mengulang (Latihan)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Jadwal Ketersediaan</label>
+                        <input type="text" id="availability_range" class="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-sm" placeholder="Pilih rentang waktu...">
+                    </div>
+
+                    <div class="col-span-1 md:col-span-2 mt-2 p-3 bg-indigo-50 rounded-lg border border-indigo-100 flex items-center justify-between">
+                        <div>
+                            <label class="block text-sm font-bold text-indigo-900">Izinkan Pembahasan?</label>
+                            <p class="text-xs text-indigo-600">Jika aktif, siswa dapat melihat kunci jawaban setelah ujian selesai.</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="allow_review" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
                 </div>
             </div>
             
@@ -85,9 +115,11 @@ $classes = db()->all("SELECT id, class_name FROM classes ORDER BY class_name ASC
                     <div class="p-4 bg-indigo-50 border-b space-y-3"><h3 class="font-bold text-indigo-900 text-sm flex items-center"><i class="fas fa-search mr-2"></i> Cari & Pilih Soal</h3><div class="flex flex-col sm:flex-row gap-2"><select id="bankPackageFilter" class="text-sm border rounded p-2 w-full focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">Semua Paket</option><?php foreach ($packages as $pkg): ?><option value="<?php echo $pkg['id']; ?>"><?php echo htmlspecialchars($pkg['package_name']); ?></option><?php endforeach; ?></select><input type="text" id="bankSearch" placeholder="Ketik isi soal..." class="text-sm border rounded p-2 w-full focus:ring-2 focus:ring-indigo-500 outline-none"></div></div><div id="bank-questions-list" class="flex-grow overflow-y-auto p-3 space-y-2 custom-scrollbar"></div><div id="bank-load-more-btn" class="hidden text-center pb-2 pt-2 bg-gray-50 border-t"><button onclick="window.loadMoreBank()" class="text-xs text-indigo-600 font-bold hover:underline">Muat Lebih Banyak...</button></div><div class="p-3 border-t bg-white text-center"><button onclick="window.addSelectedQuestions()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow text-sm flex justify-center items-center"><i class="fas fa-arrow-left mr-2 hidden md:inline"></i> <i class="fas fa-arrow-down mr-2 md:hidden"></i> Masukkan Soal Terpilih</button></div>
                 </div>
             </div>
+
             <div id="step3" class="wizard-step hidden h-full flex flex-col bg-white rounded-xl shadow-sm border overflow-hidden">
                  <div class="p-4 bg-gray-50 border-b space-y-3 shrink-0"><div class="flex flex-col md:flex-row justify-between gap-4"><div class="flex gap-2 items-end flex-1"><div class="flex-1"><label class="text-[10px] font-bold text-gray-500 uppercase">Metode</label><select id="scoring_method" onchange="window.togglePointInput()" class="w-full text-sm p-2 border rounded bg-white"><option value="points">Total Poin</option><option value="percentage">Persentase</option></select></div><div class="w-24"><label class="text-[10px] font-bold text-gray-500 uppercase">KKM</label><input type="number" id="passing_grade" class="w-full text-sm p-2 border rounded text-center font-bold text-indigo-600" value="70"></div><div id="bulk_point_container" class="flex-1 flex gap-2 items-end"><div class="flex-1"><label class="text-[10px] font-bold text-gray-400 uppercase">Set Semua Poin</label><input type="number" id="bulk_points" class="w-full text-sm p-2 border rounded" placeholder="Misal: 2"></div><button onclick="window.applyBulkPoints()" type="button" class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 px-4 py-2 rounded text-sm font-bold transition-colors mb-[1px]">Set</button></div></div><div class="flex flex-col items-end border-l pl-4 border-gray-200"><label class="flex items-center cursor-pointer mb-2"><span class="text-xs font-bold text-gray-600 mr-2">Mode Sesi</span><input type="checkbox" id="section_mode_toggle" onchange="window.toggleSectionMode()" class="sr-only peer"><div class="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 relative"></div></label><div id="section_controls" class="hidden flex flex-col gap-1 animate-fade-in items-end"><select id="current_section_select" class="text-xs p-1.5 border rounded font-bold text-indigo-700 w-48 focus:ring-2 focus:ring-indigo-500 outline-none"><option value="">-- Tanpa Sesi / Hapus --</option><option value="Script and Vocabulary">Script and Vocabulary</option><option value="Conversation and Expression">Conversation and Expression</option><option value="Listening Comprehension">Listening Comprehension</option><option value="Reading Comprehension">Reading Comprehension</option><option value="custom">+ Tambah Custom...</option></select><div class="flex gap-1"><button onclick="window.applySectionToSelected()" class="text-[10px] bg-blue-100 text-blue-700 hover:bg-blue-200 px-2 py-1 rounded border border-blue-200 font-bold transition-colors" title="Terapkan ke soal yang dicentang">Set ke Terpilih</button><button onclick="window.applySectionToAll()" class="text-[10px] bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded font-bold transition-colors" title="Terapkan ke SEMUA soal">Set Semua</button></div></div></div></div><div class="flex justify-between items-center pt-2 border-t border-gray-200"><div class="flex items-center gap-2"><input type="checkbox" id="checkAllQuestions" onchange="window.toggleCheckAll(this)" class="w-4 h-4 rounded text-indigo-600 cursor-pointer"><span class="text-xs font-bold text-gray-500">Pilih Semua</span><button onclick="window.removeSelectedQuestions()" class="ml-2 text-[10px] bg-red-50 text-red-600 px-2 py-1 rounded hover:bg-red-100 transition-colors border border-red-100"><i class="fas fa-trash mr-1"></i> Hapus Terpilih</button></div><span class="text-sm font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100">Total Skor: <span id="total_points_display">0</span></span></div></div><div id="sortable-list" class="flex-grow overflow-y-auto p-3 space-y-2 custom-scrollbar bg-gray-50"></div>
             </div>
+
             <div id="step4" class="wizard-step hidden max-w-2xl mx-auto bg-white p-6 rounded-xl shadow-sm border">
                 <h3 class="text-lg font-bold text-gray-800 mb-4 text-center">Tugaskan ke Kelas</h3>
                 <div class="max-h-[300px] overflow-y-auto pr-2 custom-scrollbar space-y-2"><label class="flex items-center p-3 rounded-lg bg-indigo-50 cursor-pointer border border-indigo-100 hover:bg-indigo-100 transition-colors"><input type="checkbox" id="assignToAll" class="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"><span class="ml-3 font-bold text-gray-700 text-sm">PILIH SEMUA KELAS</span></label><div class="border-t my-2"></div><div id="classList" class="space-y-2"><?php foreach ($classes as $cls): ?><label class="flex items-center p-3 rounded-lg border hover:bg-gray-50 cursor-pointer transition-colors"><input type="checkbox" name="class_ids[]" value="<?php echo $cls['id']; ?>" class="class-checkbox w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"><span class="ml-3 text-gray-700 text-sm"><?php echo htmlspecialchars($cls['class_name']); ?></span></label><?php endforeach; ?></div></div>

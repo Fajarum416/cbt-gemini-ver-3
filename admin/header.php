@@ -68,7 +68,7 @@ if (!function_exists('navClass')) {
 
                     <a href="index.php" style="background-color: transparent !important; box-shadow: none !important;"
                         class="flex-shrink-0 font-bold text-lg md:text-xl flex items-center gap-2 text-white hover:text-indigo-200 transition-colors mr-10">
-                        <i class="fas fa-laptop-code"></i> <span>CBT Admin</span>
+                        <i class="fas fa-laptop-code"></i> <span>Yamatest</span>
                     </a>
 
                     <div class="hidden md:block">
